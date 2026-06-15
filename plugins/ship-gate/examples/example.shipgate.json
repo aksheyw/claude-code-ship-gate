@@ -1,0 +1,102 @@
+{
+  "_comment": "Example ship-gate config showing every section. Replace the gate commands and scoping globs with the right values for your project.",
+  "mainBranch": "main",
+  "gates": {
+    "tests": {
+      "enabled": true,
+      "command": "npx vitest run"
+    },
+    "lint": {
+      "enabled": true,
+      "command": null
+    },
+    "typecheck": {
+      "enabled": true,
+      "command": null
+    },
+    "build": {
+      "enabled": false,
+      "command": null
+    },
+    "secretScan": {
+      "enabled": true
+    },
+    "codeReview": {
+      "enabled": true,
+      "skill": "ship-review",
+      "upgrade": "code-reviewer"
+    },
+    "security": {
+      "enabled": true,
+      "skill": "ship-security",
+      "upgrade": "vibe-security"
+    },
+    "uat": {
+      "enabled": true,
+      "skill": "verify",
+      "mode": "confidence"
+    }
+  },
+  "heavyGates": {
+    "audit": {
+      "skill": "deep-review",
+      "upgrade": "audit",
+      "suggestWhen": {
+        "filesChanged": 15,
+        "areasChanged": 3,
+        "riskyPaths": true
+      }
+    },
+    "deep": {
+      "skill": "deep-review",
+      "upgrade": "deep-review",
+      "suggestWhen": {
+        "diffLines": 400,
+        "riskyPaths": true,
+        "release": true
+      }
+    }
+  },
+  "regression": {
+    "enabled": true,
+    "skill": "ai-regression-testing",
+    "runWhen": "test-affecting"
+  },
+  "scoping": {
+    "docs": [
+      "**/*.md",
+      "docs/**"
+    ],
+    "ui": [
+      "src/components/**",
+      "src/pages/**",
+      "**/*.{tsx,jsx,vue,svelte}"
+    ],
+    "security": [
+      "**/auth/**",
+      "**/*payment*",
+      "**/*.rules",
+      "**/migrations/**",
+      "**/.env*",
+      "api/**",
+      "package.json",
+      "requirements*.txt",
+      "go.mod",
+      "Cargo.toml",
+      "pubspec.yaml"
+    ]
+  },
+  "deploy": {
+    "autoDetect": true,
+    "warnOnPush": true
+  },
+  "hotfix": {
+    "skipGates": [
+      "uat",
+      "regression",
+      "audit",
+      "deep"
+    ]
+  },
+  "markerTtlSeconds": 900
+}

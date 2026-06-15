@@ -1,0 +1,360 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://raw.githubusercontent.com/aksheyw/claude-code-ship-gate/main/plugins/ship-gate/schema/shipgate.schema.json",
+  "title": "ship-gate configuration (.shipgate.json)",
+  "description": "Per-project configuration for the ship-gate pre-push quality-gate plugin. The runtime deep-merges this file over built-in defaults, so any subset of these properties is valid; omitted keys fall back to defaults. This schema is for editor autocomplete and validation only and does not drive runtime behavior.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "$schema": {
+      "type": "string",
+      "description": "Optional reference to this JSON Schema for editor tooling."
+    },
+    "_comment": {
+      "type": "string",
+      "description": "Free-form note, ignored at runtime."
+    },
+    "enabled": {
+      "type": "boolean",
+      "default": true,
+      "description": "Opt-out switch. When enforcement is active for this repo (a per-repo .shipgate.json is present, or the global ~/.shipgate.json has defaultEnabled:true), set this to false to keep the config but pause enforcement. In the global ~/.shipgate.json, false is an unconditional machine-wide kill-switch."
+    },
+    "defaultEnabled": {
+      "type": "boolean",
+      "default": false,
+      "description": "GLOBAL ONLY (~/.shipgate.json): when true, gate every repo that has no per-repo .shipgate.json (default-on). Ignored inside a per-repo .shipgate.json. Set by the installer; remove ~/.shipgate.json or set false to revert to opt-in."
+    },
+    "mainBranch": {
+      "type": "string",
+      "default": "main",
+      "description": "The protected branch that /ship merges into and the push-block hook guards."
+    },
+    "gates": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "The standard quality gates run before a push.",
+      "properties": {
+        "tests": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "Test suite gate.",
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "default": true,
+              "description": "Whether this gate runs."
+            },
+            "command": {
+              "type": ["string", "null"],
+              "default": null,
+              "description": "Command to run. null means auto-detect from the project (e.g. package.json scripts)."
+            }
+          }
+        },
+        "lint": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "Lint gate.",
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "default": true,
+              "description": "Whether this gate runs."
+            },
+            "command": {
+              "type": ["string", "null"],
+              "default": null,
+              "description": "Command to run. null means auto-detect from the project."
+            }
+          }
+        },
+        "typecheck": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "Type-check gate.",
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "default": true,
+              "description": "Whether this gate runs."
+            },
+            "command": {
+              "type": ["string", "null"],
+              "default": null,
+              "description": "Command to run. null means auto-detect from the project."
+            }
+          }
+        },
+        "build": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "Build gate. Off by default.",
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "default": false,
+              "description": "Whether this gate runs."
+            },
+            "command": {
+              "type": ["string", "null"],
+              "default": null,
+              "description": "Command to run. null means auto-detect from the project."
+            }
+          }
+        },
+        "secretScan": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "Secret-scan gate that blocks pushes containing leaked credentials.",
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "default": true,
+              "description": "Whether this gate runs."
+            }
+          }
+        },
+        "codeReview": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "Code-review judgment gate.",
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "default": true,
+              "description": "Whether this gate runs."
+            },
+            "skill": {
+              "type": "string",
+              "default": "ship-review",
+              "description": "The bundled skill invoked for this gate."
+            },
+            "upgrade": {
+              "type": ["string", "null"],
+              "default": null,
+              "description": "Name of an external skill to prefer over the bundled one if installed. null means use the bundled skill."
+            }
+          }
+        },
+        "security": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "Security-review judgment gate.",
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "default": true,
+              "description": "Whether this gate runs."
+            },
+            "skill": {
+              "type": "string",
+              "default": "ship-security",
+              "description": "The bundled skill invoked for this gate."
+            },
+            "upgrade": {
+              "type": ["string", "null"],
+              "default": null,
+              "description": "Name of an external skill to prefer over the bundled one if installed. null means use the bundled skill."
+            }
+          }
+        },
+        "uat": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "User-acceptance-testing judgment gate.",
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "default": true,
+              "description": "Whether this gate runs."
+            },
+            "skill": {
+              "type": "string",
+              "default": "verify",
+              "description": "The skill invoked for this gate."
+            },
+            "mode": {
+              "type": "string",
+              "enum": ["confidence"],
+              "default": "confidence",
+              "description": "UAT resolution mode. Only confidence-scoring is implemented."
+            }
+          }
+        }
+      }
+    },
+    "heavyGates": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Heavier gates suggested when a change is large or risky.",
+      "properties": {
+        "audit": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "Codebase-audit heavy gate.",
+          "properties": {
+            "skill": {
+              "type": "string",
+              "default": "deep-review",
+              "description": "The bundled skill invoked for this gate."
+            },
+            "upgrade": {
+              "type": ["string", "null"],
+              "default": "audit",
+              "description": "Name of an external skill to prefer over the bundled one if installed. null means use the bundled skill."
+            },
+            "suggestWhen": {
+              "type": "object",
+              "additionalProperties": false,
+              "description": "Thresholds that, when met, suggest running this gate.",
+              "properties": {
+                "filesChanged": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "default": 15,
+                  "description": "Suggest when at least this many files changed."
+                },
+                "areasChanged": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "default": 3,
+                  "description": "Suggest when at least this many distinct areas changed."
+                },
+                "riskyPaths": {
+                  "type": "boolean",
+                  "default": true,
+                  "description": "Suggest when the change touches security-sensitive paths."
+                }
+              }
+            }
+          }
+        },
+        "deep": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "Deep-review heavy gate.",
+          "properties": {
+            "skill": {
+              "type": "string",
+              "default": "deep-review",
+              "description": "The bundled skill invoked for this gate."
+            },
+            "upgrade": {
+              "type": ["string", "null"],
+              "default": "deep-review",
+              "description": "Name of an external skill to prefer over the bundled one if installed. null means use the bundled skill."
+            },
+            "suggestWhen": {
+              "type": "object",
+              "additionalProperties": false,
+              "description": "Thresholds that, when met, suggest running this gate.",
+              "properties": {
+                "diffLines": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "default": 400,
+                  "description": "Suggest when the diff is at least this many lines."
+                },
+                "riskyPaths": {
+                  "type": "boolean",
+                  "default": true,
+                  "description": "Suggest when the change touches security-sensitive paths."
+                },
+                "release": {
+                  "type": "boolean",
+                  "default": true,
+                  "description": "Suggest when the change is a release."
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "regression": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "AI regression-testing gate. Off by default; runs only on test-affecting changes.",
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "default": false,
+          "description": "Whether this gate runs."
+        },
+        "skill": {
+          "type": "string",
+          "default": "ai-regression-testing",
+          "description": "The skill invoked for this gate."
+        },
+        "runWhen": {
+          "type": "string",
+          "enum": ["test-affecting"],
+          "default": "test-affecting",
+          "description": "When the gate runs. Only the test-affecting trigger is implemented."
+        }
+      }
+    },
+    "scoping": {
+      "type": "object",
+      "description": "Glob buckets used to classify a change. Built-in buckets are docs, ui, and security; custom buckets are allowed and must be string arrays.",
+      "additionalProperties": {
+        "type": "array",
+        "items": { "type": "string" }
+      },
+      "properties": {
+        "docs": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Globs that classify a path as documentation."
+        },
+        "ui": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Globs that classify a path as UI."
+        },
+        "security": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Globs that classify a path as security-sensitive."
+        }
+      }
+    },
+    "deploy": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Deploy-target detection settings.",
+      "properties": {
+        "autoDetect": {
+          "type": "boolean",
+          "default": true,
+          "description": "Whether to auto-detect the deploy target."
+        },
+        "warnOnPush": {
+          "type": "boolean",
+          "default": true,
+          "description": "Whether to warn when a push targets a deploy-connected branch."
+        }
+      }
+    },
+    "hotfix": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Hotfix fast-path settings.",
+      "properties": {
+        "skipGates": {
+          "type": "array",
+          "description": "Gates skipped on the hotfix path. tests, codeReview, secretScan, and security are always kept.",
+          "items": {
+            "enum": ["uat", "regression", "audit", "deep"]
+          }
+        }
+      }
+    },
+    "markerTtlSeconds": {
+      "type": "integer",
+      "minimum": 0,
+      "default": 900,
+      "description": "Freshness window, in seconds, for the pass-marker that authorizes a push."
+    }
+  }
+}
