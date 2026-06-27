@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-marketplace.json",
+  "name": "ship-gate",
+  "owner": { "name": "Akshey Walia", "email": "aksheyw@gmail.com" },
+  "description": "Ship Gate — a changed-file-aware pre-push quality gate for Claude Code.",
+  "plugins": [
+    {
+      "name": "ship-gate",
+      "source": "./plugins/ship-gate",
+      "description": "Run tests/lint/build + orchestrate code-review, security, and UAT skills; block pushes to main until they pass.",
+      "license": "MIT",
+      "keywords": ["ship", "gate", "ci", "pre-push", "quality", "testing", "security"]
+    }
+  ]
+}

@@ -1,0 +1,40 @@
+{
+  "_comment": "Multi-suite monorepo example (P1 area-conditional gates). A web app at the repo root, a Cloud Functions package under functions/, and Firestore security rules. Each tests/lint suite has a `when` git-pathspec and runs ONLY when files in its area change; a suite with no `when` always runs; ANY in-scope suite that fails blocks the push. So none of the three test suites can silently skip while the gate still reports PASS — the blind spot a single root `npx vitest run` leaves. build is on because pushing to main auto-deploys (e.g. Firebase Hosting), so a ~3s local build pre-flight catches a broken build before the deploy. Replace each command and pathspec with your project's. Pathspec note: `*` spans `/` (so `*.rules` matches at any depth, `functions` matches everything under functions/); brace globs like {a,b} are NOT supported — list entries separately. See README -> 'Multi-suite test gates (monorepos)'.",
+  "mainBranch": "main",
+  "gates": {
+    "tests": {
+      "enabled": true,
+      "command": [
+        { "command": "npx vitest run" },
+        { "command": "npm --prefix functions test", "when": ["functions"] },
+        { "command": "npm run test:rules",           "when": ["*.rules"] }
+      ]
+    },
+    "lint": {
+      "enabled": true,
+      "command": [
+        { "command": "npx eslint ." },
+        { "command": "npm --prefix functions run lint", "when": ["functions"] }
+      ]
+    },
+    "typecheck":  { "enabled": true, "command": "npx tsc --noEmit" },
+    "build":      { "enabled": true, "command": "npm run build" },
+    "secretScan": { "enabled": true },
+    "codeReview": { "enabled": true, "skill": "ship-review",   "upgrade": null },
+    "security":   { "enabled": true, "skill": "ship-security", "upgrade": null },
+    "uat":        { "enabled": true, "skill": "verify", "mode": "confidence" }
+  },
+  "heavyGates": {
+    "audit": { "skill": "deep-review", "upgrade": "audit",       "suggestWhen": { "filesChanged": 15, "areasChanged": 3, "riskyPaths": true } },
+    "deep":  { "skill": "deep-review", "upgrade": "deep-review", "suggestWhen": { "diffLines": 400, "riskyPaths": true, "release": true } }
+  },
+  "regression": { "enabled": false, "skill": "ai-regression-testing", "runWhen": "test-affecting" },
+  "scoping": {
+    "docs":     ["**/*.md", "docs/**"],
+    "ui":       ["src/components/**", "src/pages/**", "**/*.{tsx,jsx,vue,svelte}"],
+    "security": ["**/auth/**", "**/*payment*", "**/*.rules", "**/migrations/**", "**/.env*", "functions/**", "package.json"]
+  },
+  "deploy":  { "autoDetect": true, "warnOnPush": true },
+  "hotfix":  { "skipGates": ["uat", "regression", "audit", "deep"] },
+  "markerTtlSeconds": 900
+}
