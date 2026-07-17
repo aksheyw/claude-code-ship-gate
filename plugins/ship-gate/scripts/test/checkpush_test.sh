@@ -276,6 +276,26 @@ echo "D2: padded(push)+real-push classification took ${PAD_MS}ms"
 assert_contains "$PAD_OUT" "deny" "D2: ~40k filler containing 'push' + real 'git push origin main' => deny (padding cannot evade)"
 assert_eq "$([ "$PAD_MS" -lt 2000 ] && echo ok)" "ok" "D2: padded push detection in <2000ms (got ${PAD_MS}ms)"
 
+# CONT — line-continuation pre-filter must be O(n), not O(n^2) (F-SG-2026-07-04).
+# The pre-filter has to fold `\<newline>` continuations so `git pu\<NL>sh` (a real `git push` to bash) is
+# not false-negatived. The original `${CMD//\<NL>/}` bash substitution is O(n^2) in bash 3.2 on the COUNT
+# of continuations: ~12k of them (~24KB) pushed the WHOLE hook past its 15s timeout = fail-open (a padded
+# `git push origin\<NL>…\<NL>main` folds to a real push git executes while the hook times out). This asserts
+# a continuation-padded push is classified WELL under the timeout. RED against the old bash strip.
+_NLc=$'\n'
+CONT_PAD=$(printf 'origin\\%s' "$_NLc"; for _i in $(seq 1 15000); do printf '\\%s' "$_NLc"; done)
+CONT_CMD="git push ${CONT_PAD} main"
+CONT_JSON=$(printf '%s' "$CONT_CMD" | jq -Rsc '{tool_input:{command: .}}')
+CONT_START=$(now_ns)
+CONT_OUT=$(printf '%s' "$CONT_JSON" | SHIPGATE_GLOBAL_CONFIG="$(mktemp -u)" bash "$CP" 2>&1) || true
+CONT_END=$(now_ns)
+CONT_MS=$(( (CONT_END - CONT_START) / 1000000 ))
+echo "CONT: 15k-continuation push classification took ${CONT_MS}ms"
+assert_eq "$([ "$CONT_MS" -lt 3000 ] && echo ok)" "ok" "CONT: 15k backslash-newline continuations classified in <3000ms (got ${CONT_MS}ms) — O(n) not O(n^2)"
+# And it must still be DENIED: the continuations fold to a real `git push origin main` on gated main (no
+# marker) — the fold must not let the push evade detection.
+assert_contains "$CONT_OUT" "deny" "CONT: continuation-folded 'git push origin main' (no marker) => deny (fold does not hide the push)"
+
 # ============================================================
 # D1 (MEDIUM) — space-separated value-taking global options must be skipped so the
 # subcommand position isn't mistaken for the option's value. These EVADE detection
@@ -737,5 +757,82 @@ assert_contains "$cf4" "SEPARATE Bash"     "CF: combined form + STALE marker (di
 printf '{"head":"%s","branch":"main","ts":1,"hotfix":false}' "$(git -C "$CF" rev-parse HEAD)" > "$CF/.git/shipgate/last-pass.json"
 cf5=$(cfrun 'bash ship-gate.sh write-marker ship --gate && git push origin main')
 assert_contains "$cf5" "SEPARATE Bash"     "CF: combined form + EXPIRED marker => compound msg wins over generic 'expired'"
+
+# ============================================================
+# RS — REFSPEC SOURCE (F-SG-2026-07-01: narrow fail-open)
+# ============================================================
+# The marker records the SHA that /ship VERIFIED. The commit a push actually LANDS on the protected
+# branch is the refspec SOURCE, not the destination's local tip. Validating the marker against the
+# DESTINATION ref alone fail-OPENS: within a valid marker's TTL, `git push origin feature:main` leaves
+# the local `main` ref untouched (so the marker still "matches") while landing UNGATED feature commits
+# on the protected branch. So the SHA compared to the marker must be resolved from the SOURCE whenever
+# the command carries an explicit `src:dst` refspec.
+RS=$(mktemp -d); ( cd "$RS" && git init -q && git commit -q --allow-empty -m i && git branch -M main 2>/dev/null )
+printf '{"mainBranch":"main"}' > "$RS/.shipgate.json"
+GCFG_NONE3="$(mktemp -u)"
+rsrun(){ printf '%s' "$1" | jq -Rsc '{tool_input:{command: .}}' | ( cd "$RS" && SHIPGATE_GLOBAL_CONFIG="$GCFG_NONE3" bash "$CP" ); }
+# A feature branch whose tip is a DIFFERENT commit from main's tip (the ungated payload).
+git -C "$RS" checkout -q -b feature && git -C "$RS" commit -q --allow-empty -m ungated && git -C "$RS" checkout -q main
+# A VALID, fresh pass marker for main (as a legitimate /ship would leave, inside its 900s TTL).
+mkdir -p "$RS/.git/shipgate"
+_rs_marker(){ printf '{"head":"%s","branch":"main","ts":%s,"hotfix":false}' "$(git -C "$RS" rev-parse main)" "$(date +%s)" > "$RS/.git/shipgate/last-pass.json"; }
+_rs_marker
+# 1. THE FAIL-OPEN: an explicit refspec whose SOURCE is an ungated branch must DENY despite a valid marker.
+assert_contains "$(rsrun 'git push origin feature:main')" "deny" "RS: feature:main with a VALID main marker => deny (refspec source is ungated)"
+# 2. PRECISION: the same-commit explicit form must still ALLOW — HEAD:main from the protected branch is the
+#    documented release flow (tools/publish.sh) and resolves to the very commit the marker verified.
+assert_eq "$(rsrun 'git push origin HEAD:main')" "" "RS: HEAD:main from main WITH a valid marker => allow (source == verified commit)"
+# 3. The force-refspec form (+src:dst) must not launder the source past the check.
+assert_contains "$(rsrun 'git push origin +feature:main')" "deny" "RS: +feature:main (force refspec) => deny"
+# 4. Fully-qualified refs must not launder it either.
+assert_contains "$(rsrun 'git push origin refs/heads/feature:refs/heads/main')" "deny" "RS: fully-qualified feature refs => deny"
+# 4b. The PARTIAL-ref dst spelling `heads/main` — git DWIM-resolves it to refs/heads/main, so it must be
+#     gated too. (Confirmed against a real bare remote: main / heads/main / refs/heads/main all land on
+#     refs/heads/main; refs/main and mainx do not.) The dst alternation covers all three branch spellings.
+assert_contains "$(rsrun 'git push origin feature:heads/main')"  "deny" "RS: feature:heads/main (partial-ref dst) => deny"
+assert_contains "$(rsrun 'git push origin +feature:heads/main')" "deny" "RS: +feature:heads/main (force + partial-ref) => deny"
+assert_eq       "$(rsrun 'git push origin feature:refs/main')"   ""     "RS: feature:refs/main does NOT DWIM to a branch => allow (git itself rejects it)"
+# 5. An EMPTY source (`:main`) is a branch DELETION of the protected branch — never gated-approved.
+assert_contains "$(rsrun 'git push origin :main')" "deny" "RS: :main (delete protected branch) => deny"
+# 6. REGRESSION: the bare form is unchanged — a valid marker still allows.
+assert_eq "$(rsrun 'git push origin main')" "" "RS: bare push origin main WITH a valid marker => allow (unchanged)"
+# 7. HEAD:main from a FEATURE checkout resolves to the feature tip => the same fail-open by another route.
+git -C "$RS" checkout -q feature
+assert_contains "$(rsrun 'git push origin HEAD:main')" "deny" "RS: HEAD:main from a feature checkout => deny (HEAD is the ungated tip)"
+git -C "$RS" checkout -q main
+# CAP: the per-refspec rev-parse loop must be BOUNDED so a command padded with many refspec-looking tokens
+# (even ones hidden after a `#` comment that git never executes) fails CLOSED instantly instead of fanning
+# out into thousands of subprocesses and blowing the 15s hook timeout (= fail-open). Verify a padded
+# command DENIES, and that it does so FAST (well under the timeout).
+_rs_marker
+# The cap fires BEFORE the rev-parse loop and emits its OWN message ("too many refspecs"). Asserting that
+# specific message — not just "deny" — is what makes this non-vacuous: without the cap the same command
+# still denies, but via the generic "different commit" path AFTER looping every token (the timeout risk).
+_PAD=$(printf 'feature:main %.0s' $(seq 1 60))
+assert_contains "$(rsrun "git push origin feature:main # $_PAD")" "too many refspecs" "RS/CAP: >8 protected refspec tokens (comment-padded) => the COUNT cap deny fires (bounded, before the loop)"
+# SIZE cap: a SINGLE oversized refspec token (count=1, so the count cap passes) must also fail closed
+# BEFORE the O(n^2) bash pattern-strips, so it cannot drive the hook past the 15s timeout. 20k 'a's is far
+# past the 4096 bound but small enough to run instantly in the test.
+_BIG=$(printf 'a%.0s' $(seq 1 20000))
+assert_contains "$(rsrun "git push origin ${_BIG}:main")" "unreasonably long" "RS/CAP: single oversized refspec token => the SIZE cap deny fires (bounded, before the strips)"
+# A small, legitimate multi-refspec push to the SAME verified commit still ALLOWS (cap is generous). Both
+# tokens are explicit src:dst (main:main), so they exercise the loop, not the bare else-branch.
+assert_eq "$(rsrun 'git push origin main:main main:main')" "" "RS/CAP: a couple of same-target refspecs (<=8) still allow"
+
+# NO OVER-GATE from the source-resolution change: an everyday feature push and a bare feature push must
+# still ALLOW (the source resolver only engages once TARGET is a protected branch).
+git -C "$RS" checkout -q feature
+assert_eq "$(rsrun 'git push origin feature')"         "" "RS: plain feature push => allow (unchanged)"
+assert_eq "$(rsrun 'git push')"                        "" "RS: bare push from a feature checkout => allow (unchanged)"
+assert_eq "$(rsrun 'git push origin feature:feature')" "" "RS: feature:feature refspec => allow (dst not protected)"
+git -C "$RS" checkout -q main
+
+# NOTE — DOCUMENTED BOUNDARIES, intentionally NOT gated here (see .claude/wiki/_findings.md F-SG-2026-07-03
+# and the README scope paragraph): a QUOTED refspec (`git push origin "feature:main"`), a backslash-hidden
+# refspec (`feature:ma\in`), `--all`/`--mirror`, `--delete`/`-d`, and config-implied pushes
+# (push.default / remote.push) all resolve the target OUTSIDE the command text this hook can scan. Closing
+# them needs a token-aware refspec extractor (its own phase) — the quote-strip attempt was reverted because
+# `${CMD//"/}` is super-quadratic in bash 3.2 and reintroduced a timeout fail-open. These seams are
+# byte-identical to live v0.5.0; v0.5.1 neither adds nor worsens them.
 
 assert_summary

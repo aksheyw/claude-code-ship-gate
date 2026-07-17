@@ -22,16 +22,26 @@ GCFG="${SHIPGATE_GLOBAL_CONFIG:-${HOME:+$HOME/.shipgate.json}}"
 # after command extraction), before the repo check + enablement ladder + mainBranch/TTL config,
 # so a non-push command does ZERO git/jq work.
 #
-# F1 (continuation-aware): a backslash-newline line continuation can split the word `push`
-# itself (`git pu\<NL>sh` is `git push` to bash) — the RAW command then has NO literal `push`
-# substring, so a naive *push* test would exit 0 (allow) BEFORE the awk gsub that removes
-# continuations ever runs (fail-open). So we test a continuation-STRIPPED copy of $CMD. The
-# strip is pure bash parameter expansion (subprocess-free, O(n)) and mirrors the awk gsub.
-# It only feeds the *push* gate; the awk stage re-derives its own buffer from $CMD, so this
-# copy cannot alter downstream tokenization. (NL is a real newline via the $'\n' literal.)
+# F1 (continuation-aware): a backslash-newline line continuation can split the word `push` itself
+# (`git pu\<NL>sh` is `git push` to bash) — the RAW command then has NO literal `push` substring, so a
+# naive *push* test would exit 0 (allow) BEFORE the awk gsub that folds continuations ever runs (fail-open).
+#
+# F-SG-2026-07-04 — this MUST stay O(n). The prior fix here folded continuations with a bash
+# `${CMD//\<NL>/}` substitution, which is O(n^2) in bash 3.2 on the COUNT of `\<newline>` sequences: ~12k
+# of them (~24KB) drove the WHOLE hook past its 15s timeout, which Claude treats as NON-BLOCKING = the very
+# fail-open this pre-filter exists to close. So we do NOT fold here. Instead the fast-exit is refused for a
+# command that could hide a split push: proceed if it literally contains `push`, OR contains a `\<newline>`
+# continuation — in the latter case the O(n) C awk parser below folds correctly (its own gsub) and decides.
+# A command with NEITHER cannot be a git push, so it exits. `case` glob is a single O(n) scan with no
+# string-building and no subprocess — it cannot go quadratic (verified: 20k continuations in ~2ms vs ~85s
+# for the old substitution). The awk stage re-derives its own buffer from $CMD, so this gate never alters
+# downstream tokenization. (NL is a real newline via the $'\n' literal.)
 _NL=$'\n'
-_CMD_NOCONT="${CMD//\\$_NL/}"
-case "$_CMD_NOCONT" in *push*) : ;; *) exit 0 ;; esac
+case "$CMD" in
+  *push*)       : ;;                      # literal push present => inspect (the awk parser decides precisely)
+  *"\\${_NL}"*) : ;;                      # a line-continuation could hide `pu\<NL>sh` => cannot fast-exit
+  *)            exit 0 ;;                  # neither => cannot be a git push => allow (backup)
+esac
 
 # --- Self-contained config resolution: read .shipgate.json directly.
 # Precedence: .shipgate.json → env var → built-in default.
@@ -449,13 +459,77 @@ M_TS=$(jq -r '.ts // empty' "$MARKER")
 # Guard: empty HEAD in marker is corrupt
 [ -n "$M_HEAD" ] || _gate_fail "ship-gate marker is corrupt. Re-run /ship."
 
-# Commit-identity check: the marker records the SHA of the protected branch that /ship verified. The commit
-# THIS push will land on the protected branch is that branch's local-ref tip ($TARGET) — what a bare
-# `git push origin <TARGET>` sends. Compare those, NOT the session's checked-out HEAD: from a linked
-# worktree on a feature branch the session HEAD is the feature tip, not the protected commit being pushed.
-# Resolve $TARGET anchored to $REPO_ROOT so it is correct from a subdir / worktree. An exotic src:dst push
-# whose source differs from $TARGET's ref over-gates here (safe direction) — it can never fail OPEN.
-PUSHED_SHA=$(git -C "$REPO_ROOT" rev-parse "$TARGET" 2>/dev/null || echo "")
+# Commit-identity check: the marker records the SHA of the protected branch that /ship verified. Compare it
+# to the commit THIS push will actually LAND on the protected branch — NOT the session's checked-out HEAD
+# (from a linked worktree on a feature branch the session HEAD is the feature tip, not the protected commit
+# being pushed). All refs are resolved anchored to $REPO_ROOT so they are correct from a subdir / worktree.
+#
+# The landing commit depends on the refspec form:
+#   * bare (`git push origin main`, `-u origin main`, `--all`): the local tip of $TARGET is what git sends.
+#   * explicit `src:dst` (`feature:main`, `HEAD:main`, `+feature:main`): the SOURCE is what lands — $TARGET's
+#     own ref is NOT sent and is irrelevant.
+#
+# F-SG-2026-07-01 — this used to resolve $TARGET unconditionally, which FAIL-OPENED on the explicit form:
+# `git push origin feature:main` leaves local `main` untouched, so a valid marker for `main` still matched
+# while UNGATED feature commits landed on the protected branch. (The old comment here claimed such a push
+# "can never fail OPEN" — that only ever held for the mismatch direction.) So: when the command carries an
+# explicit refspec aimed at $TARGET, resolve the SOURCE and compare THAT to the marker.
+_ESC_T=$(_ere_escape "$TARGET")
+# Split the command into whitespace-separated tokens (one per line) and keep those of the form
+# [+]<src>:<dst> whose dst names $TARGET. git DWIM-resolves a push destination through exactly three
+# branch spellings — bare `main`, `heads/main`, and fully-qualified `refs/heads/main` — so the dst
+# alternation covers all three (NOT a leaky whitelist: these are the only prefixes git accepts for a
+# branch ref; verified against a real bare remote). Token-anchored (^…$) so a dst that merely CONTAINS
+# the branch name cannot match. Scans the RAW command ($CMD): a QUOTED refspec (`"feature:main"`) is a
+# DOCUMENTED boundary (see the README scope paragraph + F-SG-2026-07-03) — the earlier quote-strip
+# attempt was reverted because `${CMD//"/}` is super-quadratic in bash 3.2 (the platform floor) and
+# reintroduced the very timeout fail-open the awk parser closed. TARGET detection above already scans
+# $CMD the same way, so a refspec it flagged is visible here too.
+_SRC_TOKENS=$(printf '%s' "$CMD" | tr ' \t\n' '\n\n\n' | grep -E "^\+?[^:]*:(refs/heads/|heads/)?${_ESC_T}$" || true)
+if [ -n "$_SRC_TOKENS" ]; then
+  # BOUND THE WORK BEFORE THE LOOP (fail-closed). The loop below spawns one `git rev-parse` per matched
+  # token. A command padded with many refspec-looking tokens — even ones bash never sends to git (e.g.
+  # hidden after a `#` comment) — would otherwise fan out into thousands of subprocesses and push the hook
+  # past its 15s timeout, which Claude treats as NON-BLOCKING (= fail-open). That is the exact timeout
+  # class the awk parser exists to close; the loop must not reopen it. A legitimate push names at most a
+  # couple of refspecs to the protected branch, so any command with more than a small cap is rejected here
+  # WITHOUT resolving a single ref. Counting is one O(n) grep pass (C), no per-token fork.
+  # Two independent bounds, both fail-closed, both O(1)/O(n)-cheap — together they cap the loop's total work
+  # so NO attacker-controlled command length can push the hook past its 15s timeout:
+  #   (1) COUNT — one huge command can match thousands of short `…:main` tokens; each would cost a
+  #       `git rev-parse`. >8 refspecs to the protected branch is never a real push, so reject before the loop.
+  #   (2) SIZE — a SINGLE oversized token (e.g. `<1MB of a>:main`, count=1, so the count cap passes) would
+  #       hit bash 3.2's O(n^2) `${_tok%%:*}` / `${_src#+}` pattern-strips below (~7.5s each at 1MB). A real
+  #       refspec source is a ref name or a 40-char SHA; 4096 bytes is vast headroom. `${#var}` is not O(n^2).
+  # This is the third guard against the SAME class in this file (after the reverted quote-strip and the
+  # count cap): any work over the command text must be O(n) with no per-token subprocess, or fail-closed
+  # bounded. A too-long refspec source cannot resolve anyway (git rejects it), so failing closed loses nothing.
+  _NTOK=$(printf '%s\n' "$_SRC_TOKENS" | grep -c . 2>/dev/null || echo 0)
+  [ "$_NTOK" -le 8 ] || _gate_fail "ship-gate: this push names too many refspecs to '${TARGET}' (${_NTOK}). Push one refspec at a time, then re-run /ship."
+  [ "${#_SRC_TOKENS}" -le 4096 ] || _gate_fail "ship-gate: refspec to '${TARGET}' is unreasonably long. Re-run /ship, or push one normal refspec at a time."
+  # Every matched refspec must resolve, and to the SAME commit — an exotic multi-refspec push landing two
+  # different commits on one branch cannot be covered by a single-SHA marker, so it fails closed.
+  _LANDING=""
+  while IFS= read -r _tok; do
+    [ -n "$_tok" ] || continue
+    _src="${_tok%%:*}"                     # everything before the first colon is the source
+    _src="${_src#+}"                       # drop a leading force marker (+feature:main)
+    # An EMPTY source is `git push origin :main` — a DELETION of the protected branch. A pass marker
+    # attests to a verified COMMIT; it can never authorize deleting the branch. Always fail closed.
+    [ -n "$_src" ] || _gate_fail "ship-gate: refusing to delete the protected branch '${TARGET}' (empty refspec source). A ship-gate pass cannot authorize a branch deletion."
+    _sha=$(git -C "$REPO_ROOT" rev-parse --verify --quiet "${_src}^{commit}" 2>/dev/null || echo "")
+    [ -n "$_sha" ] || _gate_fail "ship-gate: unable to resolve '${_src}', the source of the push to ${TARGET}. Re-run /ship."
+    if [ -z "$_LANDING" ]; then _LANDING="$_sha"
+    elif [ "$_LANDING" != "$_sha" ]; then
+      _gate_fail "ship-gate: this push sends more than one commit to '${TARGET}'. Push one refspec at a time, then re-run /ship."
+    fi
+  done <<EOF
+$_SRC_TOKENS
+EOF
+  PUSHED_SHA="$_LANDING"
+else
+  PUSHED_SHA=$(git -C "$REPO_ROOT" rev-parse "$TARGET" 2>/dev/null || echo "")
+fi
 [ -n "$PUSHED_SHA" ] || _gate_fail "ship-gate: unable to resolve the commit being pushed to ${TARGET}. Re-run /ship."
 
 [ "$M_HEAD" = "$PUSHED_SHA" ] || _gate_fail "ship-gate pass is for a different commit. Re-run /ship."

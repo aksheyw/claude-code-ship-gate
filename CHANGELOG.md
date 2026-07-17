@@ -5,6 +5,30 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ---
 
+## [0.5.1] - 2026-07-18
+
+A security patch for the push-block hook, closing the refspec-source fail-open reported against 0.5.0.
+
+### Fixed
+- **Refspec-source bypass of the pass marker (F-SG-2026-07-01, HIGH).** Within a valid pass window, a
+  `git push origin feature:main` (or any explicit `src:dst` to the protected branch) certified against the
+  destination's local tip instead of the commit it actually landed, letting ungated commits reach the
+  protected branch. The hook now resolves the refspec **source** and compares that to the marker, covering
+  every git branch-destination spelling (`main`, `heads/main`, `refs/heads/main`). Empty-source deletions
+  (`:main`) and multi-refspec pushes landing two commits are denied. The legitimate `HEAD:main` publish
+  flow still passes.
+- **O(n²) continuation fold in the pre-filter (F-SG-2026-07-04).** A `git push` padded with ~12k
+  backslash-newline line-continuations could make the hook exceed its 15s timeout (treated as
+  non-blocking = a bypass). The fold is now O(n); a 15k-continuation command classifies in ~120 ms
+  (was ~37 s). The refspec-source resolution is likewise bounded by count and size caps so no
+  command length can time the hook out.
+
+### Known boundary (documented, not fixed)
+- The push-detection parser is O(n²) on backslash-newline continuations (pre-existing since before 0.5.0);
+  a hand-crafted ~700 KB command can still make the gate slow. Documented in the README scope boundary —
+  ship-gate is a guardrail against accidental and fast-agent pushes of your own code, not a sandbox against
+  a determined adversary crafting oversized commands.
+
 ## [0.5.0] - 2026-07-17
 
 The flagship-credibility release: the quality-gate tool now has CI on its own repo, a README you can
