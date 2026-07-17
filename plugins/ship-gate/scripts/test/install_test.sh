@@ -37,16 +37,16 @@ assert_eq "$([ -f "$FAKE/.claude/skills/ship-security/SKILL.md" ] && echo yes ||
 # Assert 2: No ${CLAUDE_PLUGIN_ROOT} token remains in any copied skill
 # Use find+xargs to avoid grep pipefail issues on no-match (bash 3.2 safe)
 # ---------------------------------------------------------------
-PLUGIN_ROOT_FILES=$(find "$FAKE/.claude/skills/" -name '*.md' | \
-  xargs grep -l '\${CLAUDE_PLUGIN_ROOT}' 2>/dev/null || true)
+PLUGIN_ROOT_FILES=$(find "$FAKE/.claude/skills/" -name '*.md' -print0 | \
+  xargs -0 grep -l '\${CLAUDE_PLUGIN_ROOT}' 2>/dev/null || true)
 assert_eq "$([ -z "$PLUGIN_ROOT_FILES" ] && echo none || echo "$PLUGIN_ROOT_FILES")" "none" \
   "no \${CLAUDE_PLUGIN_ROOT} token in any copied skill"
 
 # ---------------------------------------------------------------
 # Assert 3: No ship-gate: namespace in any copied skill
 # ---------------------------------------------------------------
-NAMESPACE_FILES=$(find "$FAKE/.claude/skills/" -name '*.md' | \
-  xargs grep -l 'ship-gate:' 2>/dev/null || true)
+NAMESPACE_FILES=$(find "$FAKE/.claude/skills/" -name '*.md' -print0 | \
+  xargs -0 grep -l 'ship-gate:' 2>/dev/null || true)
 assert_eq "$([ -z "$NAMESPACE_FILES" ] && echo none || echo "$NAMESPACE_FILES")" "none" \
   "no ship-gate: namespace in any copied skill"
 
@@ -139,7 +139,7 @@ assert_eq "$HOOK_MATCHER" "Bash" "PreToolUse[0].matcher == Bash"
 # `git -C path push`, `GIT_SSH_COMMAND=x git push` -- which would proceed ALLOWED = a
 # fail-open ABOVE check-push.sh. With no `if`, matcher:"Bash" runs check-push.sh on every
 # Bash command and the script's own (hardened, O(n)) detection is the sole, complete gate.
-# (See DECISIONS.md "Push-gate hook fires for all Bash".)
+# (Decided design: the push-gate hook fires for ALL Bash commands and self-filters.)
 HOOK_IF=$(jq -r '.hooks.PreToolUse[0].hooks[0].if // ""' "$FAKE/.claude/settings.json" 2>/dev/null || true)
 assert_eq "$HOOK_IF" '' "PreToolUse[0].hooks[0] has NO gating 'if' (D9: hook fires for all Bash; script is sole gate)"
 
@@ -160,8 +160,8 @@ assert_eq "$([ -f "$FAKE/.claude/skills/ship-review/references/code-review-check
 assert_eq "$([ -f "$FAKE/.claude/agents/ship-reviewer.md" ] && echo yes || echo no)" "yes" \
   "ship-reviewer.md agent installed"
 
-AGENT_PR_FILES=$(find "$FAKE/.claude/agents/" -name '*.md' | \
-  xargs grep -l '\${CLAUDE_PLUGIN_ROOT}' 2>/dev/null || true)
+AGENT_PR_FILES=$(find "$FAKE/.claude/agents/" -name '*.md' -print0 | \
+  xargs -0 grep -l '\${CLAUDE_PLUGIN_ROOT}' 2>/dev/null || true)
 assert_eq "$([ -z "$AGENT_PR_FILES" ] && echo none || echo "$AGENT_PR_FILES")" "none" \
   "no \${CLAUDE_PLUGIN_ROOT} in any copied agent"
 

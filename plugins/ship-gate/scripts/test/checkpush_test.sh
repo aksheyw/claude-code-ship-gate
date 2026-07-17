@@ -223,7 +223,7 @@ printf '{"mainBranch":"main"}' > "$R/.shipgate.json"
 # ============================================================
 # KNOWN LIMITATION (intentional, decided scope): detection matches DIRECT `git … push`
 # invocations only. Pushes wrapped in bash -c / eval / $(...) / backticks are NOT detected —
-# a command-string gate is not a sandbox; see DECISIONS.md. These asserts LOCK the boundary
+# a command-string gate is not a sandbox (decided scope; the README scope-boundary section is the public record). These asserts LOCK the boundary
 # so any future change to detection scope is a conscious decision, not an accident.
 # Run in the gated on-main no-marker repo R: if detection ever started matching wrappers,
 # these would flip to deny and fail loudly.
@@ -250,9 +250,12 @@ printf '{"mainBranch":"main"}' > "$R/.shipgate.json"
 BIG=$(printf 'a%.0s' $(seq 1 100000))
 PERF_CMD="$BIG ; git -C /x push"
 PERF_JSON=$(printf '%s' "$PERF_CMD" | jq -Rsc '{tool_input:{command: .}}')
-PERF_START=$(date +%s%N)
+# Portable ns clock: a BSD date without %N prints a literal trailing 'N' — strip it and fall
+# back to whole-second precision (the <2000ms bound still catches a real O(n^2) blowup).
+now_ns(){ local n; n=$(date +%s%N); case "$n" in *N) echo "$(( ${n%N} * 1000000000 ))";; *) echo "$n";; esac; }
+PERF_START=$(now_ns)
 PERF_OUT=$(printf '%s' "$PERF_JSON" | SHIPGATE_GLOBAL_CONFIG="$(mktemp -u)" bash "$CP" 2>&1) || true
-PERF_END=$(date +%s%N)
+PERF_END=$(now_ns)
 PERF_MS=$(( (PERF_END - PERF_START) / 1000000 ))
 echo "D2: 100k-char classification took ${PERF_MS}ms"
 assert_eq "$([ "$PERF_MS" -lt 2000 ] && echo ok)" "ok" "D2: 100k-char command classified in <2000ms (got ${PERF_MS}ms) — O(n) not O(n^2)"
@@ -265,9 +268,9 @@ assert_contains "$PERF_OUT" "deny" "D2: 100k-char command ending in real 'git -C
 PAD=$(printf 'push %.0s' $(seq 1 8000))   # ~40k chars, contains the word 'push' many times
 PAD_CMD="echo $PAD ; git push origin main"
 PAD_JSON=$(printf '%s' "$PAD_CMD" | jq -Rsc '{tool_input:{command: .}}')
-PAD_START=$(date +%s%N)
+PAD_START=$(now_ns)
 PAD_OUT=$(printf '%s' "$PAD_JSON" | SHIPGATE_GLOBAL_CONFIG="$(mktemp -u)" bash "$CP" 2>&1) || true
-PAD_END=$(date +%s%N)
+PAD_END=$(now_ns)
 PAD_MS=$(( (PAD_END - PAD_START) / 1000000 ))
 echo "D2: padded(push)+real-push classification took ${PAD_MS}ms"
 assert_contains "$PAD_OUT" "deny" "D2: ~40k filler containing 'push' + real 'git push origin main' => deny (padding cannot evade)"
@@ -537,7 +540,7 @@ assert_eq "$(runj "$F3_BENIGN")" "" "F3: echo a<SOH>b<NL>echo done (benign multi
 # unquoted-newline heredoc whose BODY contains a push line is conservatively DENIED — the
 # detector splits on the unquoted newline and sees the body line as its own command. Safe
 # (the shell does NOT push; the body is literal data fed to `cat`), just a usability
-# papercut; documented in DECISIONS.md. Do NOT try to model heredocs.
+# papercut; decided and accepted scope. Do NOT try to model heredocs.
 cd "$R"; git checkout -q main
 rm -f "$R/.git/shipgate/last-pass.json"
 printf '{"mainBranch":"main"}' > "$R/.shipgate.json"
@@ -549,7 +552,7 @@ DQ_NL_CMD=$(printf 'echo "a\ngit push origin main"')
 assert_eq "$(runj "$DQ_NL_CMD")"         ""     "HEREDOC-contrast: double-quoted multiline with push line => allow (newline stays in-token)"
 
 # ============================================================
-# KNOWN LIMITATION (decided scope, see DECISIONS.md): the gate matches `git push` as a
+# KNOWN LIMITATION (decided scope; the README scope-boundary section is the public record): the gate matches `git push` as a
 # simple command (env-assignments + git globals + the push subcommand, quotes/escapes
 # honored); it does NOT match pushes obscured by I/O redirection operators or invoked via
 # a prefix/wrapper program. A command-string gate is a guardrail, not a sandbox.

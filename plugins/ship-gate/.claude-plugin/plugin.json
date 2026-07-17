@@ -1,6 +1,6 @@
 {
   "name": "ship-gate",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "description": "Changed-file-aware pre-push quality gate: tests/lint/build + orchestrated code-review/security/UAT, with a push-block hook that runs before git, so git push --no-verify can't skip it.",
   "author": { "name": "Akshey Walia", "email": "aksheyw@gmail.com" },
   "homepage": "https://github.com/aksheyw/claude-code-ship-gate",

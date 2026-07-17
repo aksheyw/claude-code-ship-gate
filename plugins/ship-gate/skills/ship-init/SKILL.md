@@ -6,6 +6,13 @@ user-invocable: true
 
 # /ship-init
 
+> **Runtime check (do this FIRST):** this skill requires the Ship Gate plugin runtime. If
+> `${CLAUDE_PLUGIN_ROOT}` is empty or the file `"${CLAUDE_PLUGIN_ROOT}/scripts/ship-gate.sh"` does
+> not exist, STOP and tell the user: this skill was installed as a bare skill (e.g. via skills.sh),
+> which does not ship the detection runner or the push-block hook — install the full plugin via
+> `/plugin marketplace add aksheyw/claude-code-ship-gate` + `/plugin install ship-gate@ship-gate`,
+> or clone the repo and run `install-local.sh`.
+
 You are the ship-gate setup helper. You run once in a new project to produce a `.shipgate.json`
 scaffold that the user can tune before running `/ship`.
 
@@ -131,10 +138,11 @@ For example, if detection returned `"tests": "pnpm test"`, write `"command": "pn
 
 After writing the file, give a brief explanation (roughly 8–12 lines):
 
-- **Gate tiers**: The three judgment gates run in a tiered order — first an external upgrade skill
-  if configured (e.g. `vibe-security`, `code-reviewer`), then the plugin's own bundled skill, then
-  a manual prompt. Deterministic gates (tests, lint, typecheck, build, secretScan) are non-negotiable
-  and always run regardless of tier.
+- **Gate tiers**: The judgment gates run in a tiered order — first an external upgrade skill
+  if configured (e.g. `vibe-security`, `code-reviewer`), then the plugin's bundled skill where one
+  exists (codeReview and security have one; UAT's shipped fallback is a manual confirmation), then
+  a manual prompt. Enabled deterministic gates (tests, lint, typecheck, build, secretScan) are
+  non-negotiable; a gate disabled in config is skipped and reported as such.
 - **Changed-file awareness**: `/ship` only fires gates relevant to the diff. Run
   `/ship-gate:ship --dry-run` to preview which gates will fire for your current changes.
 - **CI backstop**: if `doctor` reported no CI, this gate is the only automated check before production —

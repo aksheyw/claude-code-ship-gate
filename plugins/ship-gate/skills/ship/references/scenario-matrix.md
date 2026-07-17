@@ -10,17 +10,17 @@ Changed files are classified via the project's `scoping` globs into buckets: **d
 
 | Gate | Runs when… | Scope of analysis |
 |---|---|---|
-| tests | always | full repo |
-| lint | always (if present) | changed files |
+| tests | always (when enabled — default on) | full repo |
+| lint | always (if present) | the configured lint command, repo-scoped (`when`-suites add changed-file conditionality) |
 | typecheck | always (if present) | full repo (type graph) |
 | build | if `build.enabled` | full repo |
-| secretScan | always | diff added lines |
-| codeReview | any non-docs code file changed (skip docs-only pushes) | diff vs main |
-| security | any code/config/dependency file changed; **deep checklist** when a `scoping.security` path is touched | diff vs main (+ touched files) |
+| secretScan | always (when enabled — default on; a disabled secretScan is omitted from the runner output) | diff added lines |
+| codeReview | any non-docs code file changed (skip docs-only pushes) | diff vs the protected branch |
+| security | any code/config/dependency file changed; **deep checklist** when a `scoping.security` path is touched | diff vs the protected branch (+ touched files) |
 | uat | confidence table: **ui→required**, logic (hooks/contexts)→recommended, lib/api→optional, analytics/docs→skip | running app |
 | audit | opt-in `--audit`; **suggested** when filesChanged ≥ threshold, areasChanged ≥ threshold, riskyPaths, or release/tag | whole codebase |
 | deep | opt-in `--deep`; **suggested** when diffLines ≥ threshold, riskyPaths, or release context | the diff/plan artifact, iterative |
-| regression | enabled AND test-affecting changes | sandbox API tests |
+| regression | enabled AND test-affecting changes | advisory strategy pointer only — runs no command, never blocks |
 
 Docs-only push (`**/*.md` only) ⇒ deterministic gates + secretScan run; all judgment gates skip; push proceeds. `--hotfix` skips uat/regression/audit/deep regardless. Thresholds come from `heavyGates.*.suggestWhen` and are config-tunable.
 

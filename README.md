@@ -1,19 +1,57 @@
 # Ship Gate — a pre-push quality gate for Claude Code that an agent can't skip with a flag
 
-[![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE) ![tests: 364 passing](https://img.shields.io/badge/tests-364%20passing-brightgreen.svg) ![Claude Code plugin](https://img.shields.io/badge/Claude%20Code-plugin-8A2BE2.svg)
+[![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE) [![CI](https://github.com/aksheyw/claude-code-ship-gate/actions/workflows/ci.yml/badge.svg)](https://github.com/aksheyw/claude-code-ship-gate/actions/workflows/ci.yml) [![release](https://img.shields.io/github/v/release/aksheyw/claude-code-ship-gate)](https://github.com/aksheyw/claude-code-ship-gate/releases) ![Claude Code plugin](https://img.shields.io/badge/Claude%20Code-plugin-8A2BE2.svg)
 
 > **Most quality checks die to one flag (`git push --no-verify`). Ship Gate runs *above* git, so that flag isn't there to reach for.**
 > It's a guardrail against the accidental push and the fast-moving agent, not a sandbox against someone who is determined to get around it. That boundary is real and spelled out below; the gate doesn't pretend otherwise.
 
 Ship Gate is a Claude Code plugin that sits between your AI and your protected branch like a bouncer who actually checks IDs. Before a push to that branch goes through, it runs the checks I'd otherwise have to remember at 1am: tests, lint, typecheck, build, a secret scan, a code-review pass, security, UAT. It won't let the push through until there's a fresh **gate-pass marker** for the exact commit being pushed. Pass the gates, say "ship it" (or run `/ship`), and it writes the marker and pushes for you. Fail one, and there's no "just push it anyway" button left to press.
 
-There are two ways to turn it on. Installed from the marketplace, it's **opt-in per repo**: it guards only repos that contain a `.shipgate.json`. Installed for yourself with `install-local.sh`, it's **on by default for every repo**, with a `--no-default-on` flag to keep it opt-in and one-command ways to pause any repo or revert entirely. It ships with working review defaults and needs no other plugins installed.
+The full story of how this gate was designed and hardened is in the product case study: [CASE-STUDY.md](CASE-STUDY.md).
 
-The push-block hook went through a 14-lens deep review and three adversarial red-team passes that found and fixed seven different ways a cleverly-shaped command could sneak a push past it. The review methodology that found them is itself a companion repo, [claude-code-deep-review](https://github.com/aksheyw/claude-code-deep-review).
+## Quick install
+
+Two ways to turn it on. Pick one mode and stick to it; running both installs duplicate commands. [Full install options below.](#install)
+
+**Marketplace install** (opt-in per repo: it guards only repos that contain a `.shipgate.json`):
+
+```
+/plugin marketplace add aksheyw/claude-code-ship-gate
+/plugin install ship-gate@ship-gate
+```
+
+**Personal install** (on by default for every repo, with a `--no-default-on` flag to keep it opt-in):
+
+```sh
+git clone https://github.com/aksheyw/claude-code-ship-gate.git
+cd claude-code-ship-gate
+bash install-local.sh
+```
+
+### Install just the review gates via skills.sh
+
+`ship-review` (the code-review gate) and `ship-security` (the security gate) carry self-contained checklists and work as standalone skills:
+
+```sh
+npx skills add aksheyw/claude-code-ship-gate --skill ship-review --skill ship-security
+```
+
+Plainly: `/ship` and `/ship-init` need the full plugin runtime. The push-block hook and the deterministic scripts don't ship through a bare skills install, so a skills-only install gives you the two review checklists, not the gate. One more caveat: `ship-review` prefers a `/code-review` skill and falls back to the bundled `ship-reviewer` agent, which also only ships with the full plugin; without either, its distilled checklist still runs on its own.
+
+## How it works
+
+- A **`PreToolUse` hook sits above git**: it fires before the Bash tool runs the push command at all, and denies any push to the protected branch without a valid gate-pass marker. By the time git would consult its own hooks, Ship Gate has already allowed or denied the action.
+- The **marker is bound to the exact commit** about to be pushed, on the right branch, within a TTL. It is written only when every required gate passes (that's what `/ship` does).
+- **Fail-closed**: a malformed config or a missing, expired, or mismatched marker means deny, and no flag skips it. The one seam is a hook that fails to *execute* at all (Claude Code treats a hook execution error or timeout as non-blocking), so the hook is built to always run and answer fast: self-contained, quoted paths, O(n) parsing, all locked by regression tests.
+
+The push-block hook went through a 14-lens deep review and three adversarial red-team passes that found and fixed seven different ways a cleverly-shaped command could sneak a push past it. The review methodology that found them is itself a companion repo, [claude-code-deep-review](https://github.com/aksheyw/claude-code-deep-review). It ships with working review defaults and needs no other plugins installed.
 
 <details>
 <summary><b>Contents</b></summary>
 
+- [Quick install](#quick-install)
+- [How it works](#how-it-works)
+- [Product case study](CASE-STUDY.md)
 - [Why I built this](#why-i-built-this)
 - [What's in this repo](#whats-in-this-repo)
 - [The part I actually care about: where the gate sits](#the-part-i-actually-care-about-where-the-gate-sits)
@@ -51,12 +89,12 @@ Then I walked back the opt-in decision, but only partly. The footgun was never t
 
 | Component | Kind | What it does |
 |-----------|------|-------------|
-| `ship` | Skill | **Orchestrator.** Runs every gate, prints a Gate Status Summary, then writes the pass-marker and pushes/merges to the protected branch once every required gate passes and nothing needs your input. A command (`/ship`, or "ship it") authorizes the push; a question ("is this ready?") or `--dry-run` reports without pushing. It still pauses for any gate that needs a decision: UAT, a feature-branch merge, a detected deploy target. |
+| `ship` | Skill | **Orchestrator.** Runs every gate, prints a Gate Status Summary, then writes the pass-marker and pushes/merges to the protected branch once every required gate passes and nothing needs your input. A command (`/ship`, or "ship it") authorizes the push; a question ("is this ready?") or `--dry-run` reports without pushing. It still pauses for anything that needs a decision: UAT, a detected deploy target, or the merge guard when a feature branch has pending commits and the gates are not fully green. |
 | `ship-init` | Skill | **Setup.** Auto-detects your test/lint/typecheck/build commands from `package.json` / `go.mod` / `Cargo.toml` / `pyproject.toml` / etc. and scaffolds `.shipgate.json`. |
 | `ship-review` | Skill | **Code-review gate.** Invokes `/code-review` plus a distilled checklist; emits Approve / Warning / Block. |
 | `ship-security` | Skill | **Security gate.** Applies a distilled security checklist to the diff; opportunistically augments with `/security-review`. |
 | `ship-reviewer` | Agent | Fallback reviewer used when `/code-review` is unavailable; embeds all review dimensions inline. |
-| Push-block hook | PreToolUse hook | `hooks/hooks.json` + `scripts/check-push.sh`. In every gated repo, denies `git push` to the protected branch without a valid marker. This is what makes the gate impossible to skip. |
+| Push-block hook | PreToolUse hook | `hooks/hooks.json` + `scripts/check-push.sh`. In every gated repo, denies `git push` to the protected branch without a valid marker. This is what takes the one-keystroke skip off the table. |
 | Trigger rule | Rule | `rules/shipgate-trigger.md` — routes plain-language ship intent ("ship it") to `/ship`. Installed to `~/.claude/rules` by `install-local.sh`; marketplace users add a one-liner (see below). |
 | Deterministic runner | Script | `scripts/ship-gate.sh detect\|run\|doctor\|write-marker\|protected-branch\|disable\|enable\|status` — runs the gates, flags uncovered test suites (`doctor`), resolves the protected branch, toggles per-repo gating; CI-reusable. |
 | JSON Schema | Config | `schema/shipgate.schema.json` (Draft-07) for editor autocomplete on `.shipgate.json`. |
@@ -71,11 +109,11 @@ A normal git `pre-push` hook runs *inside* git, so `git push --no-verify` turns 
 
 Three things make me trust it in practice, and the third is the one that matters:
 
-- **Fail-closed.** The hook is self-contained (no sourced libraries) and routes every failure mode (no repo root, missing/expired/mismatched marker, unparseable config, even a missing `awk`) to **deny**. A broken hook blocks the push; it never silently allows it.
-- **On by default, with four ways out.** A personal install gates every repo; a marketplace install gates only repos with a `.shipgate.json`. Whichever you use, you can step out at four levels: a session bypass (`SHIPGATE_DISABLE=1`), a machine-wide off switch (`enabled:false` in `~/.shipgate.json`), a per-repo pause (`/ship off`), or `--no-default-on` at install time. A repo you've paused or never adopted is never gated, so an install can't hijack a project you didn't mean to cover.
+- **Fail-closed.** The hook is self-contained (no sourced libraries) and routes every failure mode it can evaluate (no repo root, missing/expired/mismatched marker, unparseable config, even a missing `awk`) to **deny**. The honest caveat: a hook that fails to *execute* is non-blocking in Claude Code, so "always executes, never times out" is itself an engineered property here: dependency-free with quoted paths, O(n) parsing, both locked by regression tests that reproduce the historical fail-open bugs.
+- **On by default, with four ways out.** A personal install gates every repo; a marketplace install gates only repos with a `.shipgate.json`. Whichever you use, you can step out at four levels: a session bypass (`SHIPGATE_DISABLE=1`), a machine-wide off switch (`enabled:false` in `~/.shipgate.json`), a per-repo pause (`/ship off`), or `--no-default-on` at install time. A repo you've stepped out of is never gated, and in opt-in mode a repo that never adds `.shipgate.json` is never touched, so an install can't hijack a project you decided not to cover.
 - **Marker-bound.** A push is allowed only when `.git/shipgate/last-pass.json` records the **exact commit** about to be pushed, on the right branch, within a configurable TTL (default 900s). Pass the gates via `/ship` and the marker is written for you; otherwise it isn't there.
 
-**Scope boundary (deliberate):** the gate matches `git push` as a *simple command*, honoring env-assignment prefixes, git global options, and bash quoting/escaping. It does **not** chase a push hidden inside a wrapper (`bash -c`, `eval`, `$(...)`, `sudo`, `xargs`, …) or obscured by I/O redirection. Closing those is unbounded shell-reimplementation that tends to introduce *new* holes. Ship Gate is a guardrail for the normal and the accidental, backed by the marker workflow, not a sandbox against a determined adversary.
+**Scope boundary (deliberate):** the gate matches `git push` as a *simple command*, honoring env-assignment prefixes, git global options, and bash quoting/escaping. It does **not** chase a push hidden inside a wrapper (`bash -c`, `eval`, `$(...)`, `sudo`, `xargs`, …) or obscured by I/O redirection — closing those is unbounded shell-reimplementation that tends to introduce *new* holes. Two further seams are different in kind (bounded fixes, tracked for a hardening release): the hook judges a push against the repo the session is standing in (a push aimed at a different repo via `git -C` is evaluated by the current repo's gating, not the target's), and the marker validates the commit a plain `git push origin <branch>` would land, so exotic `src:dst` refspec forms sit at the boundary of what it can certify today. Ship Gate is a guardrail for the normal and the accidental, backed by the marker workflow, not a sandbox against a determined adversary.
 
 ---
 
@@ -115,7 +153,7 @@ An *enabled* gate with no command becomes a visible `[WARN]` the orchestrator mu
 
 ## Install
 
-**Requirements:** `git`, `bash`, `jq`, `awk` (all POSIX-standard / ubiquitous). On Windows, use WSL or git-bash.
+**Requirements:** `git`, `bash`, `jq`, `awk`. `jq` (and on a minimal system `git`) may need installing; `bash` and `awk` are effectively everywhere. On Windows, use WSL or git-bash.
 
 **Pick one mode and stick to it.** Running both installs duplicate commands.
 
@@ -248,7 +286,7 @@ Changed files are classified into buckets (docs, ui, logic, security-sensitive, 
 
 | Gate | When it runs |
 |------|-------------|
-| tests / secretScan | always |
+| tests / secretScan | always when enabled (both on by default) |
 | lint / typecheck | always (if a command is present) |
 | build | only when `gates.build.enabled` is `true` |
 | codeReview | any non-docs code file changed; skipped on docs-only pushes |
@@ -265,13 +303,15 @@ Changed files are classified into buckets (docs, ui, logic, security-sensitive, 
 
 Each judgment gate resolves in three tiers: a configured **external upgrade** (if installed) → the plugin's **bundled default** → a **manual** prompt. A missing optional upgrade never hard-blocks; it warns once and falls back.
 
-| Gate | Bundled default | Optional upgrade (`gates.*.upgrade`) |
+| Gate | Bundled default | External (used when installed; falls back gracefully) |
 |------|----------------|--------------------------------------|
-| codeReview | `ship-review` skill + `ship-reviewer` agent fallback | `code-reviewer` agent; `coderabbit` |
-| security | `ship-security` skill | `vibe-security` |
-| uat | `/verify` + `/run` | (user-decided) |
-| regression | advisory `ai-regression-testing` strategy pointer — off by default; runs no command, never blocks | — |
-| audit / deep | `/deep-review` via `--audit` / `--deep` | `audit` / `deep-review` skills |
+| codeReview | `ship-review` skill + `ship-reviewer` agent fallback | `code-reviewer` agent; `coderabbit`; or any `gates.codeReview.upgrade` |
+| security | `ship-security` skill | `vibe-security`, `/security-review`; or any `gates.security.upgrade` |
+| uat | manual confirmation prompt | `/verify` + `/run` if your setup has them |
+| regression | off by default; an advisory strategy pointer only — runs no command, never blocks | e.g. `ai-regression-testing` |
+| audit / deep | bundled checklists (`references/audit-checklist.md` / `deep-review-lenses.md`) applied directly | `/deep-review` or `heavyGates.*.upgrade` skills if installed |
+
+None of the external skills above ship with this plugin; every gate works with only what's in this repo, and an installed external simply upgrades it.
 
 **Companion plugins** (install independently; Ship Gate does *not* call them, but they complement it): `security-guidance` (Anthropic edit/commit/push reminder hooks), `aikido` (SAST + secrets via MCP), `42crunch` (OpenAPI scanning), `sensitive-canary` (secret-scan hooks). All unversioned; see upstream.
 
@@ -281,7 +321,13 @@ Each judgment gate resolves in three tiers: a configured **external upgrade** (i
 
 ```sh
 # 1. Full deterministic test suite (expect TOTAL PASS=364 FAIL=0)
-for t in plugins/ship-gate/scripts/test/*_test.sh; do bash "$t"; done
+tp=0; tf=0
+for t in plugins/ship-gate/scripts/test/*_test.sh; do
+  s=$(bash "$t" | tail -1)
+  case "$s" in PASS=*FAIL=*) ;; *) echo "NO SUMMARY: $t (aborted?)"; exit 1;; esac
+  p=${s#PASS=}; p=${p%% *}; f=${s##*FAIL=}
+  tp=$((tp+p)); tf=$((tf+f))
+done; echo "TOTAL PASS=$tp FAIL=$tf"; [ "$tf" = "0" ]
 
 # 2. Both manifests validate
 claude plugin validate ./plugins/ship-gate

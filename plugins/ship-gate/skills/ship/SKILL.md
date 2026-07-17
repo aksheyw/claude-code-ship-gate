@@ -9,6 +9,13 @@ allowed-tools: Bash Read Skill Task
 
 Arguments: $ARGUMENTS
 
+> **Runtime check (do this FIRST):** this skill requires the Ship Gate plugin runtime. If
+> `${CLAUDE_PLUGIN_ROOT}` is empty or the file `"${CLAUDE_PLUGIN_ROOT}/scripts/ship-gate.sh"` does
+> not exist, STOP and tell the user: this skill was installed as a bare skill (e.g. via skills.sh),
+> which does not ship the deterministic runner or the push-block hook — install the full plugin via
+> `/plugin marketplace add aksheyw/claude-code-ship-gate` + `/plugin install ship-gate@ship-gate`,
+> or clone the repo and run `install-local.sh`. Do NOT improvise the gates without the runner.
+
 You are the ship-gate orchestrator. You run a layered set of gates, then — when every required gate
 passes and no gate needs the user's input — write the pass marker and push to the protected branch.
 An imperative `/ship` (or a natural-language ship command like "ship it") is the authorization; you
@@ -27,7 +34,9 @@ reports WITHOUT pushing.
 
 ## Gate tiers (read before running)
 - **Deterministic gates** (tests, lint, typecheck, build, secretScan) run via the bundled runner.
-  They are non-negotiable: never skipped, never "degraded". A non-zero exit STOPS the ship.
+  An ENABLED deterministic gate is non-negotiable: never skipped, never "degraded", and a non-zero
+  exit STOPS the ship. A gate disabled in config is skipped by the runner (most print a
+  `[SKIP] (disabled)` line; a disabled secretScan is omitted from the output).
 - **Judgment gates** (codeReview, security, uat, regression) resolve in three tiers:
   **upgrade** (a configured external skill/agent, if installed) → **bundled default** (this plugin's
   own skill/agent) → **manual**. On a missing OPTIONAL upgrade, warn once **per gate** and fall back —
@@ -55,7 +64,8 @@ reports WITHOUT pushing.
 2. **Classify changed files** using `references/scenario-matrix.md` and the project's `scoping` globs
    (docs / ui / logic / security-sensitive / config-infra / test-affecting). If the change is
    **docs-only** (every changed path matches `**/*.md`), skip ALL judgment gates — only the
-   deterministic gates and secretScan run, then proceed to the summary.
+   deterministic gates and secretScan run, then proceed to the summary. An explicitly requested
+   heavy gate (`--audit` / `--deep`) still runs: a typed flag overrides the docs-only shortcut.
 
 3. **Deterministic gates.** Run `bash "${CLAUDE_PLUGIN_ROOT}/scripts/ship-gate.sh" run`. It prints a per-gate
    [PASS]/[FAIL] line and exits non-zero if any gate fails. On non-zero exit, STOP and report which gate failed
@@ -67,7 +77,9 @@ reports WITHOUT pushing.
    to proceed (or advise setting `gates.tests.command` in `.shipgate.json`). Disabled gates print `[SKIP] ...
    (disabled)` instead and are fine to skip.
 
-4. **Judgment gates** — run each only when the scenario matrix says it applies; resolve every one
+4. **Judgment gates** — first honor the config: a gate whose `gates.<gate>.enabled` is `false` in
+   `.shipgate.json` is SKIPPED (report `[SKIP] <gate> — disabled in config`), same as the deterministic
+   gates. For the rest, run each only when the scenario matrix says it applies; resolve every one
    upgrade → bundled default → manual (warn once on a missing optional upgrade, then fall back):
    - **codeReview** (any non-docs code file changed): if `gates.codeReview.upgrade` is set and that
      skill/agent is installed, use it; else invoke the bundled `ship-gate:ship-review` skill (it runs

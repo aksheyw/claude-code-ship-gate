@@ -5,6 +5,47 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ---
 
+## [0.5.0] - 2026-07-17
+
+The flagship-credibility release: the quality-gate tool now has CI on its own repo, a README you can
+act on in 15 seconds, and honest positioning for bare-skill installs.
+
+### Added
+
+- **CI on this repo.** `.github/workflows/ci.yml` runs the full 364-assertion bash suite on
+  ubuntu + macos and validates all four manifests with jq, on pushes to main and on every pull request. The README's
+  hardcoded test-count badge is replaced by the live CI badge (the hardcoded-count class silently went
+  stale twice; a live badge can't).
+- **skills.sh runtime guards.** `ship` and `ship-init` now open with a runtime check: if
+  `CLAUDE_PLUGIN_ROOT` is empty (a bare skills.sh install), they stop and point to the full plugin
+  install instead of running without the deterministic runner and the push-block hook. `ship-review`
+  and `ship-security` carry self-contained checklists and need no guard (`ship-review`'s optional
+  fallback reviewer agent ships only with the full plugin).
+
+### Changed
+
+- **README restructured for the 15-second rule.** Quick install (marketplace + personal) and a
+  3-bullet How-it-works now sit above the fold; a skills.sh subsection says plainly what a bare skills
+  install does and does not deliver; release + CI badges added; the case study (`CASE-STUDY.md`) is
+  now linked. Existing prose largely kept and pushed down; the wording fixes below are the exceptions.
+- **Honest fail-closed wording.** The README no longer claims "a broken hook blocks the push":
+  a hook that fails to execute (or times out) is non-blocking in Claude Code. Both fail-closed
+  passages now state that seam plainly and explain how the hook engineers around it (self-contained,
+  quoted paths, O(n) parsing, regression-locked).
+- **`/ship` honors `gates.<gate>.enabled: false` for judgment gates.** The schema always defined
+  the flag; the orchestrator prompt never consulted it for codeReview/security/uat. A disabled
+  judgment gate is now reported `[SKIP] (disabled)` instead of running anyway.
+- **Test suite made CI-portable.** Tests no longer depend on the runner's git identity
+  (hermetic env identity in the shared assert harness) and the perf timer no longer requires
+  GNU `date +%s%N` (portable fallback). No deterministic gating logic touched.
+
+### Notes
+
+- The push-block hook, the locked awk push-detection parser, the marker, and the deterministic
+  runner scripts are **byte-untouched** in this release. Plugin suite stays 364/0.
+
+---
+
 ## [0.4.0] - 2026-06-26
 
 Multi-suite / area-conditional deterministic gates — so a repo with more than one test suite can't get a
@@ -217,7 +258,7 @@ Initial release.
   performance, maintainability) inline; no external skill required at runtime.
   Also usable directly via `codeReview.upgrade: "ship-reviewer"`.
 
-- **Bundled reference checklists** (`skills/ship/references/`):
+- **Bundled reference checklists** (each under its skill's `references/` dir):
   - `code-review-checklist.md` - distilled from vibe-security, code-reviewer, OWASP
   - `security-checklist.md` - distilled from vibe-security, OWASP, gitleaks
   - `audit-checklist.md` - whole-codebase systemic sweep

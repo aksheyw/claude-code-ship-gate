@@ -1,0 +1,56 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  test:
+    name: bash suite (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run the plugin test suite
+        run: |
+          set -u
+          tp=0; tf=0
+          for t in plugins/ship-gate/scripts/test/*_test.sh; do
+            o="$(bash "$t" 2>&1)" || true
+            s="$(printf '%s' "$o" | tail -1)"
+            case "$s" in
+              PASS=*FAIL=*)
+                p="${s#PASS=}"; p="${p%% *}"; f="${s##*FAIL=}"
+                tp=$((tp+p)); tf=$((tf+f))
+                if [ "$f" != "0" ]; then
+                  printf '%s\n' "$o"
+                  echo "FAILED: $(basename "$t")"
+                  exit 1
+                fi ;;
+              *)
+                printf '%s\n' "$o"
+                echo "NO PASS=/FAIL= SUMMARY: $(basename "$t")"
+                exit 1 ;;
+            esac
+          done
+          echo "TOTAL PASS=$tp FAIL=$tf"
+          [ "$tf" = "0" ]
+
+  manifests:
+    name: manifest validation
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate manifests with jq
+        run: |
+          set -eu
+          jq -e '.name and .version and .description' plugins/ship-gate/.claude-plugin/plugin.json >/dev/null
+          jq -e '.name and .plugins' .claude-plugin/marketplace.json >/dev/null
+          jq -e . plugins/ship-gate/hooks/hooks.json >/dev/null
+          jq -e . plugins/ship-gate/schema/shipgate.schema.json >/dev/null
+          echo "manifests OK"

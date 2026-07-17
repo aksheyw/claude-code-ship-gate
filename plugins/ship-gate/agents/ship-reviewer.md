@@ -12,7 +12,7 @@ You are a focused code reviewer for the `ship-gate` plugin. Your job is to revie
 Run one of the following (prefer the first that produces output):
 
 ```bash
-git diff main...HEAD   # feature branch vs main
+git diff main...HEAD   # feature branch vs the protected branch (substitute master/your trunk if the repo uses one)
 git diff HEAD          # unstaged changes
 git diff --staged      # staged changes only
 ```
