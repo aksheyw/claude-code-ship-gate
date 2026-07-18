@@ -5,6 +5,17 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ---
 
+## [0.5.3] - 2026-07-18
+
+A docs release: the README demo GIF is now much faster to watch.
+
+### Changed
+- **Demo GIF sped up ~4x (roughly 90s → 21s).** Same real `/ship` run, trimmed of the dead air where
+  the model was thinking, so the arc (bypass ask → refusal → `ship it` → gates pass → push) reads in a
+  third the time. Same file at `assets/demo.gif`.
+
+---
+
 ## [0.5.2] - 2026-07-18
 
 A docs release: the README now leads with a recorded demo of the gate in action.
