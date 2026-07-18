@@ -5,7 +5,23 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ---
 
-## [0.5.1] - 2026-07-18
+## [0.5.2] - 2026-07-18
+
+A docs release: the README now leads with a recorded demo of the gate in action.
+
+### Added
+- **Demo GIF (`assets/demo.gif`), embedded near the top of the README.** Every frame is a real `/ship`
+  run: asked to "just push to main and skip the gates," Claude declines to bypass and points to `/ship`,
+  which runs the gates, writes the pass marker, and pushes. Recorded with [vhs](https://github.com/charmbracelet/vhs);
+  the tape and its throwaway-repo setup live in `docs/` (maintainer-only, outside the public export).
+
+### Changed
+- `tools/publish.sh` now includes a top-level `assets/` directory in the export allowlist, and
+  `tools/publish_test.sh` asserts the demo GIF ships and the README reference resolves.
+
+---
+
+## [0.5.1] - 2026-07-17
 
 A security patch for the push-block hook, closing the refspec-source fail-open reported against 0.5.0.
 

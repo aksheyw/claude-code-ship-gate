@@ -7,6 +7,10 @@
 
 Ship Gate is a Claude Code plugin that sits between your AI and your protected branch like a bouncer who actually checks IDs. Before a push to that branch goes through, it runs the checks I'd otherwise have to remember at 1am: tests, lint, typecheck, build, a secret scan, a code-review pass, security, UAT. It won't let the push through until there's a fresh **gate-pass marker** for the exact commit being pushed. Pass the gates, say "ship it" (or run `/ship`), and it writes the marker and pushes for you. Fail one, and there's no "just push it anyway" button left to press.
 
+![Ship Gate in action: asked to skip the gates and push straight to main, Claude declines to bypass and points to /ship; "ship it" then runs the gates, writes the marker, and pushes.](assets/demo.gif)
+
+*Asked to "just push to main and skip the gates," Claude won't bypass — it runs `/ship`, the gates pass (a docs-only change here, so the heavy ones auto-skip), and it pushes. Every frame is a real `/ship` run.*
+
 The full story of how this gate was designed and hardened is in the product case study: [CASE-STUDY.md](CASE-STUDY.md).
 
 ## Quick install
