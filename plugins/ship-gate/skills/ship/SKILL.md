@@ -78,7 +78,7 @@ reports WITHOUT pushing.
    (disabled)` instead and are fine to skip.
 
 4. **Judgment gates** — first honor the config: a gate whose `gates.<gate>.enabled` is `false` in
-   `.shipgate.json` is SKIPPED (report `[SKIP] <gate> — disabled in config`), same as the deterministic
+   `.shipgate.json` is SKIPPED (report `[SKIP] <gate> (disabled in config)`), same as the deterministic
    gates. For the rest, run each only when the scenario matrix says it applies; resolve every one
    upgrade → bundled default → manual (warn once on a missing optional upgrade, then fall back):
    - **codeReview** (any non-docs code file changed): if `gates.codeReview.upgrade` is set and that
@@ -123,14 +123,14 @@ reports WITHOUT pushing.
    keep `audit / deep` on their own opt-in line:
    ```
    ## Ship Gate Summary
-   [PASS] tests — <result>
-   [PASS] lint / typecheck / build — <result or "skipped (disabled)">
-   [PASS] secretScan — clean
-   [PASS] codeReview — <verdict> (resolved via: <upgrade|ship-review|manual>)
-   [PASS] security — <verdict> (resolved via: <upgrade|ship-security|manual>)
-   [USER] uat — <confidence>% UI impact — user decision: <required|skipped>
-   <[PASS]|[FAIL]|[SKIP]> regression — <ran: result | skipped: disabled | skipped: not test-affecting>
-   <[PASS]|[FAIL]|[SKIP]> audit / deep — <ran | not requested>
+   [PASS] tests: <result>
+   [PASS] lint / typecheck / build: <result or "skipped (disabled)">
+   [PASS] secretScan: clean
+   [PASS] codeReview: <verdict> (resolved via: <upgrade|ship-review|manual>)
+   [PASS] security: <verdict> (resolved via: <upgrade|ship-security|manual>)
+   [USER] uat: <confidence>% UI impact (user decision: <required|skipped>)
+   <[PASS]|[FAIL]|[SKIP]> regression: <ran: result | skipped (disabled) | skipped (not test-affecting)>
+   <[PASS]|[FAIL]|[SKIP]> audit / deep: <ran | not requested>
    Branch: <branch>   Target: origin/<protected-branch>
    ```
    If `--dry-run` — or a QUESTION/NEGATION invoked this ("should we ship?", "is this ready?", "don't ship yet") —
@@ -180,7 +180,7 @@ reports WITHOUT pushing.
      push is honored). If integration is still needed, do it from the primary checkout, then write the marker.
    - **Deploy-target confirm (the one place auto-push still asks):** if a deploy target was detected
      (`deploy.warnOnPush`, or the runner's `detect` reports one), pushing to `<protected>` likely triggers a
-     production deploy — a consequence the gates never evaluated. Print `[CONFIRM] deploy target detected —
+     production deploy — a consequence the gates never evaluated. Print `[CONFIRM] deploy target detected:
      pushing <protected> may trigger a production deploy. Proceed? (yes/no)` and wait for "yes" before pushing.
    - `git push origin <protected>`. If the push is rejected (non-fast-forward), HALT and report — do not `--force`
      (P8-8). Then, if a feature branch was merged, offer to delete it.
@@ -193,6 +193,6 @@ reports WITHOUT pushing.
 ```
 ## [YYYY-MM-DD] Hotfix: <description>
 **Context:** <what was broken>
-**Decision:** Fast-shipped with reduced gates — skipped: uat, regression, audit, deep (kept: tests, code review, security, secret scan)
+**Decision:** Fast-shipped with reduced gates (skipped: uat, regression, audit, deep; kept: tests, code review, security, secret scan)
 **Consequences:** Run full regression/UAT next session to verify no side effects
 ```
