@@ -88,9 +88,17 @@ assert_eq "$run_rc" "1" "array: a failing no-when suite always runs => gate FAIL
 do_run "$(build_run_repo '[{"command":"true"},{"command":"true"}]')"
 assert_eq "$run_rc" "0" "array: all in-scope suites pass => gate passes"
 
+# BEHAVIOUR CHANGED 2026-07-23 (was: exit 0 + a [WARN]). An independent Codex review flagged this as a
+# real FAIL-OPEN: `"tests":{"enabled":true,"command":[]}` passed structural validation (jq's `all` is
+# vacuously true over `[]`), the runner warned "empty suite list" and returned SUCCESS, so an ENABLED
+# deterministic gate exited 0 having run nothing. The original exit-0 assert was never an argued decision
+# (no DECISIONS.md entry, no wiki rationale) - it was written incidentally alongside the 0.4.0 multi-suite
+# feature, and it contradicts this project's own stated rule: fail CLOSED on a config the runtime would
+# otherwise mis-handle into a silent gate skip / false PASS. An enabled gate with nothing to run is a
+# config ERROR, so it now fails closed (exit 2) like every other malformed structure.
 do_run "$(build_run_repo '[]')"
-assert_eq "$run_rc" "0" "empty suite array => no failure (nothing ran)"
-assert_contains "$run_out" "WARN" "empty suite array => visible [WARN] (never a silent green)"
+assert_eq "$run_rc" "2" "empty suite array => FAILS CLOSED (an enabled gate that runs nothing is a config error)"
+assert_contains "$run_out" "fail closed" "empty suite array => explicit fail-closed message (never a silent green)"
 
 # ---------------------------------------------------------------------------------------------------------
 # Task 1.3b (review HIGH #2) — `detect` must NOT emit the raw multi-line JSON array as the `tests` value

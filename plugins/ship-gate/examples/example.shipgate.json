@@ -25,7 +25,9 @@
     },
     "typecheck": {
       "enabled": false,
-      "command": null
+      "command": null,
+      "reason": "no TypeScript / no tsconfig in this repo",
+      "since": "2026-05-29"
     },
     "build": {
       "enabled": true,

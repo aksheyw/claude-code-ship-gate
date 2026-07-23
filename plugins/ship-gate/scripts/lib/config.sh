@@ -36,7 +36,10 @@ sg_merged_config(){ local dir="$1" cfg="$1/.shipgate.json"
 # => [SKIP] => exit 0); a non-boolean .gates.*.enabled (0/null/1/[] string-compared to "true" => silently
 # OFF); a .command that is not null|string|array-of-{non-empty-string command, optional string-array when}
 # (a JSON `true` command => eval builtin true => false [PASS]; an object/array-of-arrays `when` =>
-# value-iterated => real pathspecs dropped => silent skip). Returns non-zero => sg_guard_config exits 2.
+# value-iterated => real pathspecs dropped => silent skip). Also rejects an EMPTY suite array: jq's `all`
+# is vacuously true over `[]`, so `"tests":{"enabled":true,"command":[]}` used to VALIDATE, then the runner
+# warned "empty suite list" and returned success — an ENABLED deterministic gate exiting 0 having run
+# nothing (found by an independent Codex review 2026-07-23). Returns non-zero => sg_guard_config exits 2.
 sg_config_structure_ok(){ local dir="$1" m
   m=$(sg_merged_config "$dir") || return 1
   printf '%s' "$m" | jq -e '
@@ -45,7 +48,7 @@ sg_config_structure_ok(){ local dir="$1" m
       and ((.value.enabled | type) == "boolean")
       and ( (.value | has("command") | not) or (.value.command == null)
             or ((.value.command | type) == "string" and (.value.command | gsub("\\s";"") | length) > 0)
-            or ((.value.command | type) == "array" and (.value.command | all(
+            or ((.value.command | type) == "array" and (.value.command | length) > 0 and (.value.command | all(
                   (type == "object") and has("command")
                   and ((.command | type) == "string") and ((.command | gsub("\\s";"") | length) > 0)
                   and ((has("when") | not) or (.when == null)
@@ -83,6 +86,31 @@ sg_change_base(){ local dir="$1" p base head
   base=$(git -C "$dir" merge-base "$p" HEAD 2>/dev/null) || { echo ""; return 0; }
   [ -n "$base" ] && [ "$base" != "$head" ] && { printf '%s\n' "$base"; return 0; }
   echo ""; }
+# sg_changed_files <dir> — the AUTHORITATIVE list of files in the change being shipped, one path per line,
+# computed in bash from git rather than from a model's reading of the diff.
+#
+# WHY THIS EXISTS: codeReview is a JUDGMENT gate — an LLM reads the diff and returns a verdict. On a large
+# changeset a model reviews a subset and still reports "looks good", and nothing previously asserted
+# otherwise; the deterministic tier had no say in WHICH files were examined. This is the same split the
+# rest of the plugin runs on: engineering decides the part that must not be got wrong (the file list), the
+# agent does the part that needs judgment (whether the code is any good). /ship diffs the reviewer's
+# claimed coverage against this list before the gate may go green (SKILL.md step 4).
+#
+# It is a MANIFEST, never a gate: it always exits 0 and never blocks a push. Same four sources as
+# sg_suite_in_scope, for the same reason — /ship runs the gates BEFORE committing, so a staged or
+# brand-new untracked file is part of what ships and must be reviewed. core.quotePath=false keeps
+# non-ASCII paths byte-exact (git would otherwise emit "caf\303\251.js", which a reviewer cannot match
+# against the real diff). Ignored files are excluded by --exclude-standard / git's own rules.
+sg_changed_files(){ local dir="$1" root base
+  root=$(git -C "$dir" rev-parse --show-toplevel 2>/dev/null) || { return 0; }
+  [ -n "$root" ] || return 0
+  base=$(sg_change_base "$dir")
+  { [ -n "$base" ] && git -C "$root" -c core.quotePath=false diff --name-only "$base" HEAD 2>/dev/null
+    git -C "$root" -c core.quotePath=false diff --name-only 2>/dev/null
+    git -C "$root" -c core.quotePath=false diff --cached --name-only 2>/dev/null
+    git -C "$root" -c core.quotePath=false ls-files --others --exclude-standard 2>/dev/null
+    :; } | LC_ALL=C sort -u
+  return 0; }
 # sg_suite_in_scope <dir> <gate-key> <idx> <base>  -> exit 0 = run, 1 = skip.
 # A `when`-conditional suite (P1) runs iff a changed file matches its `when` git-pathspecs, matched against
 # the committed range (base..HEAD) AND unstaged-tracked AND STAGED AND UNTRACKED-new files: /ship runs the

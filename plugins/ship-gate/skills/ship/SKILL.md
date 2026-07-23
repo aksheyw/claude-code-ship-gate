@@ -28,6 +28,7 @@ reports WITHOUT pushing.
 - Status: !`git status --short`
 - Protected branch: !`bash "${CLAUDE_PLUGIN_ROOT}/scripts/ship-gate.sh" protected-branch . 2>/dev/null || echo main`
 - Changed vs protected: !`B=$(bash "${CLAUDE_PLUGIN_ROOT}/scripts/ship-gate.sh" protected-branch . 2>/dev/null || echo main); git diff "$B"...HEAD --name-only 2>/dev/null || git diff HEAD --name-only`
+- Files in this change (coverage denominator): !`bash "${CLAUDE_PLUGIN_ROOT}/scripts/ship-gate.sh" changed-files . 2>/dev/null | wc -l | tr -d ' '`
 - Project config: !`cat .shipgate.json 2>/dev/null || echo "(none — using auto-detected defaults; suggest /ship-gate:ship-init)"`
 - Ship-gate gating: !`bash "${CLAUDE_PLUGIN_ROOT}/scripts/ship-gate.sh" status . 2>/dev/null || echo on`
 - CI backstop: !`bash "${CLAUDE_PLUGIN_ROOT}/scripts/ship-gate.sh" detect . 2>/dev/null | jq -r 'if (.ci|length)>0 then .ci else "none detected — this gate is the only automated check before prod" end' 2>/dev/null || echo unknown`
@@ -76,15 +77,38 @@ reports WITHOUT pushing.
    passed. Per spec §16 ("do not silently pass; user decides"), surface it and require an explicit acknowledgment
    to proceed (or advise setting `gates.tests.command` in `.shipgate.json`). Disabled gates print `[SKIP] ...
    (disabled)` instead and are fine to skip.
+   **No silent skip on config drift (the other half of §16):** a `[SKIP] <gate> (disabled)` line is fine —
+   but scan for `[DRIFT]` and `[DRIFT-ACK]` lines too, which mean the gate is disabled while the repo now
+   looks like it has that capability (test files, a lint config, a tsconfig, a build script detected where
+   there was none when the gate was turned off). These are NOT interchangeable with a plain `[SKIP]`:
+   - **`[DRIFT] <gate>: ...`** (no `reason` recorded in `.shipgate.json`) — treat this exactly like the
+     missing-command case above: PAUSE, surface it, and require an explicit acknowledgment before proceeding
+     (or point at `/ship doctor`, which proposes a concrete config fix). Do not proceed past it silently —
+     this is precisely the gap that let a 20-commit push through a repo with 174 real, unrun tests.
+   - **`[DRIFT-ACK] <gate>: ...`** (a `reason` IS recorded on the gate) — do NOT pause. Include it verbatim
+     in the Gate Status Summary (step 7) so the recorded reason is visible every ship, not buried in a
+     commit message from weeks ago, but a dated, conscious decision does not need re-litigating on every
+     push. (Argued in DECISIONS.md: pausing on every `[DRIFT-ACK]` would train people to click through the
+     line, which is worse than the silent-skip this feature exists to fix.)
 
 4. **Judgment gates** — first honor the config: a gate whose `gates.<gate>.enabled` is `false` in
-   `.shipgate.json` is SKIPPED (report `[SKIP] <gate> (disabled in config)`), same as the deterministic
+   `.shipgate.json` is SKIPPED (report `[SKIP] <gate> — disabled in config`), same as the deterministic
    gates. For the rest, run each only when the scenario matrix says it applies; resolve every one
    upgrade → bundled default → manual (warn once on a missing optional upgrade, then fall back):
    - **codeReview** (any non-docs code file changed): if `gates.codeReview.upgrade` is set and that
      skill/agent is installed, use it; else invoke the bundled `ship-gate:ship-review` skill (it runs
      `/code-review` plus the distilled checklist); if even `/code-review` is unavailable, fall back to
      the bundled `ship-reviewer` agent via Task. STOP on a **Block** verdict; carry Warnings into the summary.
+     **FILE-COVERAGE REQUIREMENT — a review that skipped files is not a passed gate.** Before accepting any
+     codeReview verdict, get the deterministic manifest:
+     `bash "${CLAUDE_PLUGIN_ROOT}/scripts/ship-gate.sh" changed-files .` — one path per line, computed in
+     bash from git, NOT from your reading of the diff. That list is the denominator. The reviewer must
+     account for **every** path on it: either reviewed, or explicitly classified as needing no review (a
+     lockfile, a generated file, a pure rename, a binary asset) **with the reason stated**. Report coverage
+     as `N/M files` in the summary. If any path is unaccounted for, the gate is **INCOMPLETE, not passed**:
+     say which files were missed, review those specifically, and only then accept the verdict. Never
+     accept "looks good overall" over a subset of a large changeset — that is the failure this exists to
+     stop. (A docs-only change skips judgment gates entirely per step 2, so this does not apply there.)
    - **security** (any code/config/dependency file changed; use the **deeper** checklist when a
      `scoping.security` path is touched): if `gates.security.upgrade` is installed, use it; else invoke
      the bundled `ship-gate:ship-security` skill (self-contained checklist; opportunistically also run
@@ -123,14 +147,14 @@ reports WITHOUT pushing.
    keep `audit / deep` on their own opt-in line:
    ```
    ## Ship Gate Summary
-   [PASS] tests: <result>
-   [PASS] lint / typecheck / build: <result or "skipped (disabled)">
-   [PASS] secretScan: clean
-   [PASS] codeReview: <verdict> (resolved via: <upgrade|ship-review|manual>)
-   [PASS] security: <verdict> (resolved via: <upgrade|ship-security|manual>)
-   [USER] uat: <confidence>% UI impact (user decision: <required|skipped>)
-   <[PASS]|[FAIL]|[SKIP]> regression: <ran: result | skipped (disabled) | skipped (not test-affecting)>
-   <[PASS]|[FAIL]|[SKIP]> audit / deep: <ran | not requested>
+   [PASS] tests — <result>
+   [PASS] lint / typecheck / build — <result, "skipped (disabled)", or "DRIFT-ACK: disabled (reason: ...)">
+   [PASS] secretScan — clean
+   [PASS] codeReview — <verdict>, coverage <N>/<M> files (resolved via: <upgrade|ship-review|manual>)
+   [PASS] security — <verdict> (resolved via: <upgrade|ship-security|manual>)
+   [USER] uat — <confidence>% UI impact — user decision: <required|skipped>
+   <[PASS]|[FAIL]|[SKIP]> regression — <ran: result | skipped: disabled | skipped: not test-affecting>
+   <[PASS]|[FAIL]|[SKIP]> audit / deep — <ran | not requested>
    Branch: <branch>   Target: origin/<protected-branch>
    ```
    If `--dry-run` — or a QUESTION/NEGATION invoked this ("should we ship?", "is this ready?", "don't ship yet") —
@@ -145,6 +169,11 @@ reports WITHOUT pushing.
    - **UAT required/recommended and not yet satisfied** → PAUSE; the USER makes the final call.
    - **A missing/ambiguous test command** (a `[WARN] … no command detected` on an enabled gate) → PAUSE for an
      explicit acknowledgment (per step 3 — never silently pass).
+   - **codeReview coverage is incomplete** (a path from `changed-files` neither reviewed nor explicitly
+     classified as needing none) → the gate is NOT passed; review the missed files before proceeding.
+   - **A `[DRIFT]` line with no recorded reason** (a disabled gate, capability now detected) → PAUSE for an
+     explicit acknowledgment, same as the missing-command case (per step 3). A `[DRIFT-ACK]` line (reason
+     recorded) does NOT pause — carry it into the summary and proceed.
    - **Merge guard** (feature branch, pending commits, gates not fully passed) → PAUSE for an explicit "yes".
    - **A heavy-gate `suggestWhen` heuristic fired** → suggest it and let the user decide.
    - **Any genuine edge you surface** that the configured gates do not formally cover → raise it and wait.
@@ -180,7 +209,7 @@ reports WITHOUT pushing.
      push is honored). If integration is still needed, do it from the primary checkout, then write the marker.
    - **Deploy-target confirm (the one place auto-push still asks):** if a deploy target was detected
      (`deploy.warnOnPush`, or the runner's `detect` reports one), pushing to `<protected>` likely triggers a
-     production deploy — a consequence the gates never evaluated. Print `[CONFIRM] deploy target detected:
+     production deploy — a consequence the gates never evaluated. Print `[CONFIRM] deploy target detected —
      pushing <protected> may trigger a production deploy. Proceed? (yes/no)` and wait for "yes" before pushing.
    - `git push origin <protected>`. If the push is rejected (non-fast-forward), HALT and report — do not `--force`
      (P8-8). Then, if a feature branch was merged, offer to delete it.
@@ -193,6 +222,6 @@ reports WITHOUT pushing.
 ```
 ## [YYYY-MM-DD] Hotfix: <description>
 **Context:** <what was broken>
-**Decision:** Fast-shipped with reduced gates (skipped: uat, regression, audit, deep; kept: tests, code review, security, secret scan)
+**Decision:** Fast-shipped with reduced gates — skipped: uat, regression, audit, deep (kept: tests, code review, security, secret scan)
 **Consequences:** Run full regression/UAT next session to verify no side effects
 ```

@@ -14,6 +14,7 @@
         { "type": "string" },
         {
           "type": "array",
+          "minItems": 1,
           "items": {
             "type": "object",
             "additionalProperties": false,
@@ -70,7 +71,15 @@
               "default": true,
               "description": "Whether this gate runs."
             },
-            "command": { "$ref": "#/definitions/commandSpec" }
+            "command": { "$ref": "#/definitions/commandSpec" },
+            "reason": {
+              "type": "string",
+              "description": "Why this gate is disabled, if it is. Recorded here (not just in a commit message) so the premise is auditable at ship time, not buried in history. When set, a detected config-drift signal (the repo now looks like it has this gate's capability) downgrades from a blocking [DRIFT] to an informational [DRIFT-ACK] — see 'since' and doctor."
+            },
+            "since": {
+              "type": "string",
+              "description": "Free-form date (e.g. 2026-06-13) the 'reason' was recorded. Lets a human eyeball staleness (an old date next to a capability the repo now clearly has is worth a second look) without any runtime expiry logic."
+            }
           }
         },
         "lint": {
@@ -83,7 +92,9 @@
               "default": true,
               "description": "Whether this gate runs."
             },
-            "command": { "$ref": "#/definitions/commandSpec" }
+            "command": { "$ref": "#/definitions/commandSpec" },
+            "reason": { "type": "string", "description": "Why this gate is disabled, if it is — see gates.tests.reason." },
+            "since": { "type": "string", "description": "Free-form date the 'reason' was recorded — see gates.tests.since." }
           }
         },
         "typecheck": {
@@ -96,7 +107,9 @@
               "default": true,
               "description": "Whether this gate runs."
             },
-            "command": { "$ref": "#/definitions/commandSpec" }
+            "command": { "$ref": "#/definitions/commandSpec" },
+            "reason": { "type": "string", "description": "Why this gate is disabled, if it is — see gates.tests.reason." },
+            "since": { "type": "string", "description": "Free-form date the 'reason' was recorded — see gates.tests.since." }
           }
         },
         "build": {
@@ -109,7 +122,9 @@
               "default": false,
               "description": "Whether this gate runs."
             },
-            "command": { "$ref": "#/definitions/commandSpec" }
+            "command": { "$ref": "#/definitions/commandSpec" },
+            "reason": { "type": "string", "description": "Why this gate is disabled, if it is — see gates.tests.reason." },
+            "since": { "type": "string", "description": "Free-form date the 'reason' was recorded — see gates.tests.since." }
           }
         },
         "secretScan": {
@@ -301,6 +316,14 @@
           "enum": ["test-affecting"],
           "default": "test-affecting",
           "description": "When the advisory pointer fires. Only the test-affecting trigger is implemented."
+        },
+        "reason": {
+          "type": "string",
+          "description": "Why this advisory pointer is disabled, if it is. Documentation only — regression is not a command gate, so it has no drift detection; recording the premise here keeps it auditable alongside the command gates' reason fields."
+        },
+        "since": {
+          "type": "string",
+          "description": "Free-form date the 'reason' was recorded."
         }
       }
     },

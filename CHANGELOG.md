@@ -5,6 +5,55 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ---
 
+## [0.5.4] - 2026-07-23
+
+### Added
+- **Config-drift detection — the other half of the "no silent pass" spec.** Until now, a `.shipgate.json`
+  that disabled a gate ("docs-only repo, tests off") could go stale as the repo grew real capability, and
+  every ship would report a clean `[SKIP]` while nothing ran. `run` now cheaply checks (no execution, just
+  a filename scan) whether a disabled `tests`/`lint`/`typecheck`/`build` gate's capability is actually
+  present in the repo. `[DRIFT]` (no reason recorded) pauses `/ship` for an explicit acknowledgment, the
+  same weight as an enabled gate with no command; `[DRIFT-ACK]` (a `gates.<gate>.reason` + optional `.since`
+  recorded) surfaces every run but does not pause — a dated, conscious decision doesn't need re-litigating
+  on every push. A legitimately non-applicable gate stays a plain, silent `[SKIP]`.
+- `ship-gate.sh doctor` now also audits an existing `.shipgate.json` against the same detection and
+  proposes a concrete fix (the real auto-detected command, or an honest "inspect manually" placeholder).
+- Schema: optional `reason`/`since` string properties on `gates.{tests,lint,typecheck,build}`.
+- **File-coverage requirement on the codeReview gate.** `codeReview` is a judgment gate — a model reads
+  the diff and returns a verdict — so on a large changeset it could review a subset and still report a
+  pass, with nothing asserting otherwise. New `ship-gate.sh changed-files` emits the authoritative list of
+  files in the shipped change, computed in bash from git rather than from the model's reading of the diff
+  (committed range + staged + unstaged + untracked; ignored files excluded; non-ASCII paths byte-exact via
+  `core.quotePath=false`). `/ship` now requires every path on that list to be either reviewed or explicitly
+  classified as needing no review with a stated reason, reports coverage as `N/M files`, and treats an
+  unaccounted path as an INCOMPLETE gate rather than a pass. It is a manifest, never a gate: it always
+  exits 0 and never blocks a push on its own — the deterministic tier keeps exit-code semantics for gates
+  that actually execute something.
+
+### Fixed
+- A `set -euo pipefail` footgun in the new detection code (a function's last-executed command being a
+  false `&&` test propagates that exit status as the function's own return code, which aborts the script
+  when the caller assigns via command substitution) — caught by the test suite before it shipped.
+- **Fail-open: an enabled gate with an empty suite array reported a pass without running (found by an
+  independent Codex review).** `"tests":{"enabled":true,"command":[]}` passed structural validation —
+  jq's `all` is vacuously true over `[]` — after which the runner warned "empty suite list" and returned
+  success, so an ENABLED deterministic gate exited 0 having executed nothing. An enabled gate with nothing
+  to run is a config error and now fails closed, matching the rule already applied to every other
+  malformed structure. **Behaviour change:** a config carrying `command: []` now aborts (exit 2) instead
+  of warning. The schema gained `minItems: 1` to match.
+- **An unknown subcommand exited 0.** `ship-gate.sh <typo>` printed usage and returned success, so a CI
+  step or wrapper trusting the exit status read a clean pass while no gate had run. Unrecognised
+  operations now exit 2; an explicit `help` still exits 0.
+- Capability discovery now respects git's view of the repo (`git ls-files -z --cached --others
+  --exclude-standard`) instead of scanning the raw filesystem, and prunes `vendor/`. Without this, a
+  git-ignored linked worktree, a vendored dependency, or build output inflated the count and could name an
+  untracked copy as the example. Five further edges found by an adversarial review pass and fixed with
+  tests: non-ASCII paths (git quotes them without `-z`, making such files invisible to detection),
+  tracked-but-deleted files being counted, a trailing slash on the target dir silently dropping a root
+  `Makefile`, and a directory inside a parent repo's ignored path reporting no capability at all.
+
+---
+
 ## [0.5.3] - 2026-07-18
 
 A docs release: the README demo GIF is now much faster to watch.

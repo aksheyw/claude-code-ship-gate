@@ -36,4 +36,12 @@ PB=$(mktemp -d); ( cd "$PB" && git init -q ); printf '{"mainBranch":"trunk"}' > 
 assert_eq "$(SHIPGATE_GLOBAL_CONFIG="$GN" bash "$SG" protected-branch "$PB")" "trunk" "protected-branch: explicit mainBranch => trunk"
 PB2=$(mktemp -d); ( cd "$PB2" && git init -q )
 assert_eq "$(SHIPGATE_GLOBAL_CONFIG="$GN" bash "$SG" protected-branch "$PB2")" "main" "protected-branch: no config/no remote => main (first of {main,master} fallback)"
+# Codex review 2026-07-23 (CONFIRMED): an unknown/misspelled subcommand printed usage and exited 0, so a
+# CI step or wrapper that runs `ship-gate.sh rum` (typo) and trusts the exit status reads "gate passed"
+# when no gate ran at all. Usage on an unrecognised operation must be a FAILURE, not a silent success.
+rumrc=0; bash "$SG" rum . >/dev/null 2>&1 || rumrc=$?
+assert_eq "$rumrc" "2" "usage: an unknown subcommand exits NON-ZERO (never a silent pass)"
+helprc=0; bash "$SG" help >/dev/null 2>&1 || helprc=$?
+assert_eq "$helprc" "0" "usage: an explicit 'help' still exits 0"
+
 assert_summary
