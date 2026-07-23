@@ -1,6 +1,6 @@
 ---
 name: ship-security
-description: Ship Gate security gate — applies the distilled security checklist to the diff; optionally augments with /security-review.
+description: Ship Gate security gate, applies the distilled security checklist to the diff; optionally augments with /security-review.
 user-invocable: true
 ---
 

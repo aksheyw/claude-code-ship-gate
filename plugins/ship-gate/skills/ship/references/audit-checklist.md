@@ -2,7 +2,7 @@
 
 Used by the `ship` orchestrator when `--audit` is passed (or suggested by the scenario matrix).
 This is a broad systemic sweep of the **whole codebase**, not just the diff.
-Only flag findings you are **>80% confident** are real issues — do not flood with noise.
+Only flag findings you are **>80% confident** are real issues: do not flood with noise.
 
 ---
 
@@ -10,7 +10,7 @@ Only flag findings you are **>80% confident** are real issues — do not flood w
 
 Raw database/API keys (snake_case, camelCase, SCREAMING_SNAKE, numeric codes) leaking into user-facing output.
 
-- Every field rendered in UI passes through a centralized, null-safe formatter — not inline `replace(/_/g, ' ')` → **Block**
+- Every field rendered in UI passes through a centralized, null-safe formatter: not inline `replace(/_/g, ' ')` → **Block**
 - Grep for `{item?.fieldName}` / `{{ obj.field }}` patterns in display contexts; none should expose raw enum values → **Block**
 - Sibling fields of any known raw-value leak are checked codebase-wide (one leak implies many) → **Warn**
 - All output channels audited (UI, email templates, push notifications, PDF exports, error messages) → **Warn**
@@ -19,7 +19,7 @@ Raw database/API keys (snake_case, camelCase, SCREAMING_SNAKE, numeric codes) le
 
 ## 2. API Contract Mismatch
 
-Client and server disagree on request/response shape — headers, auth tokens, body field names.
+Client and server disagree on request/response shape: headers, auth tokens, body field names.
 
 - Every API endpoint has a response adapter; components never read raw response paths → **Block**
 - Auth header injection is centralized in one API client module (not duplicated per-call) → **Block**
@@ -54,7 +54,7 @@ CORS rules list dev domains but omit the production domain; new domain migration
 
 App features blocked by consent denial; or analytics/cookies firing despite consent being denied (GDPR violation).
 
-- App is fully functional with analytics consent denied — no feature logic gated on `consentGranted` → **Block**
+- App is fully functional with analytics consent denied: no feature logic gated on `consentGranted` → **Block**
 - Zero analytics cookies or tracking pixels set when consent is denied → **Block**
 - All `trackEvent()` calls are no-ops (not thrown errors) when consent is denied → **Block**
 - Consent state persists across sessions and is revocable after initial choice → **Warn**
@@ -65,7 +65,7 @@ App features blocked by consent denial; or analytics/cookies firing despite cons
 
 Template-literal Tailwind classes (`bg-${color}-500`) work in dev but are purged in production builds.
 
-- Zero template literal class names with dynamic color, size, or variant segments — use static class maps instead → **Block**
+- Zero template literal class names with dynamic color, size, or variant segments: use static class maps instead → **Block**
 - All conditional classes use static ternaries or lookup objects with full class strings visible at parse time → **Block**
 - Production build visually verified (not only dev server) → **Warn**
 
@@ -84,10 +84,10 @@ Multiple individually minor issues that compound: `window.open` without `noopene
 
 ## 8. Test and Mock Completeness
 
-New module exports break all tests that mock that module — the mock omits the new export, causing `undefined is not a function` at test time.
+New module exports break all tests that mock that module: the mock omits the new export, causing `undefined is not a function` at test time.
 
 - After any new export is added, ALL files that `vi.mock()` / `jest.mock()` the changed module are updated to include it → **Block**
-- Full test suite passes — not just the changed file's tests → **Block**
+- Full test suite passes: not just the changed file's tests → **Block**
 - Mock behavior matches real implementation for edge cases (null, undefined, empty array) → **Warn**
 - Changed function signatures are reflected in every mock that references them → **Warn**
 
@@ -121,12 +121,12 @@ Apply the >80%-confidence filter before assigning severity. Consolidate related 
 
 | Highest-severity finding | Verdict |
 |--------------------------|---------|
-| Any **Block** item (CRITICAL or HIGH confidence) | **Block** — do not push; fix required |
-| Only **Warn** items (MEDIUM/LOW, no Blocks) | **Warning** — proceed with caution; note findings |
+| Any **Block** item (CRITICAL or HIGH confidence) | **Block**: do not push; fix required |
+| Only **Warn** items (MEDIUM/LOW, no Blocks) | **Warning**: proceed with caution; note findings |
 | No findings above threshold | **Approve** |
 
 A **Block** verdict from this checklist overrides other passing gates. The orchestrator decides whether to halt the push.
 
 ---
 
-Credit: distilled from the `audit` skill (`~/.claude/skills/audit/SKILL.md`) — 10 systemic bug categories derived from production incidents in a production project.
+Credit: distilled from the `audit` skill (`~/.claude/skills/audit/SKILL.md`), 10 systemic bug categories derived from production incidents in a production project.

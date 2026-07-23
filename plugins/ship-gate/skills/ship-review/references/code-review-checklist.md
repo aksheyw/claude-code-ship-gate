@@ -1,7 +1,7 @@
 # Code Review Checklist
 
 Used by the `ship-review` gate as a secondary pass after `/code-review`.
-Only flag findings you are **>80% confident** are real issues — do not flood with noise.
+Only flag findings you are **>80% confident** are real issues: do not flood with noise.
 
 ---
 
@@ -78,8 +78,8 @@ Apply the >80%-confidence filter before assigning severity. Consolidate similar 
 
 | Highest-severity finding | Verdict |
 |--------------------------|---------|
-| Any **Block** item (CRITICAL or HIGH confidence) | **Block** — do not push; fix required |
-| Only **Warn** items (MEDIUM/LOW, no Blocks) | **Warning** — proceed with caution; note findings |
+| Any **Block** item (CRITICAL or HIGH confidence) | **Block**: do not push; fix required |
+| Only **Warn** items (MEDIUM/LOW, no Blocks) | **Warning**: proceed with caution; note findings |
 | No findings above threshold | **Approve** |
 
 A **Block** verdict from this checklist overrides a passing `/code-review` result. The orchestrator, not this skill, decides whether to halt the push.

@@ -23,7 +23,7 @@ Every change must keep the suite green and both manifests valid.
 ## What to know before you open a PR
 
 - **The push-detection parser is bounded on purpose.** Ship Gate matches `git push` as a simple command (env-assignment prefixes, git global options, and bash quoting/escaping are all honored). It does not chase a push hidden inside a wrapper (`bash -c`, `eval`, `$(...)`, `sudo`, `xargs`) or obscured by I/O redirection. That boundary is deliberate: reimplementing bash inside a hook tends to introduce new holes. A report about a wrapper-hidden push is working as intended; a report about a *normal* command shape that slips through is a real bug worth fixing with a test.
-- **The hook fails closed on everything it can evaluate.** Any change to `check-push.sh` must keep every failure mode the hook can see routing to `deny`, and must keep the hook always-executing and fast (a hook that errors or times out is non-blocking in Claude Code — that seam is engineered around, not wished away). Add a test that proves it.
+- **The hook fails closed on everything it can evaluate.** Any change to `check-push.sh` must keep every failure mode the hook can see routing to `deny`, and must keep the hook always-executing and fast (a hook that errors or times out is non-blocking in Claude Code, that seam is engineered around, not wished away). Add a test that proves it.
 - **Small files, immutable patterns.** Match the surrounding style.
 
 ## Opening a PR

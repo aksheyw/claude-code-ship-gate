@@ -1,19 +1,19 @@
 # Security Checklist
 
 Used by the `ship-security` gate as the primary (self-contained) pass over the diff.
-Only flag findings you are **>80% confident** are real issues — do not flood with noise.
+Only flag findings you are **>80% confident** are real issues: do not flood with noise.
 
 ---
 
 ## Secrets
 
 - Hardcoded API key, token, password, or connection string in source → **Block**
-- Secret accessible via client-side env var prefix (`NEXT_PUBLIC_`, `VITE_`, `EXPO_PUBLIC_`, `REACT_APP_`) — not a publishable/anon key → **Block**
+- Secret accessible via client-side env var prefix (`NEXT_PUBLIC_`, `VITE_`, `EXPO_PUBLIC_`, `REACT_APP_`): not a publishable/anon key → **Block**
 - Supabase `service_role` key or Stripe `sk_live_*`/`sk_test_*` key anywhere in client-side code → **Block**
 - JWT signing secret or OAuth client secret in a client bundle → **Block**
 - `.env`, `.env.local`, or `*.pem` file committed to the repo (not in `.gitignore`) → **Block**
 - `.env.example` or `.env.sample` contains real key values rather than placeholders → **Warn**
-- Git history contains secret patterns (`sk_live_`, `sk-or-v1-`, `AKIA`, `ghp_`, `glpat-`, `Bearer `) — run `gitleaks detect` → **Warn**
+- Git history contains secret patterns (`sk_live_`, `sk-or-v1-`, `AKIA`, `ghp_`, `glpat-`, `Bearer `): run `gitleaks detect` → **Warn**
 
 ---
 
@@ -34,10 +34,10 @@ Only flag findings you are **>80% confident** are real issues — do not flood w
 
 ## Auth
 
-- `jwt.decode()` used instead of `jwt.verify()` — signature never validated → **Block**
+- `jwt.decode()` used instead of `jwt.verify()`: signature never validated → **Block**
 - JWT library not explicitly rejecting `"alg": "none"` → **Block**
 - Auth token stored in `localStorage` instead of `HttpOnly + Secure + SameSite` cookie → **Block**
-- Next.js middleware is the sole auth layer (no re-check in Server Action or Route Handler) — CVE-2025-29927 bypass vector → **Block**
+- Next.js middleware is the sole auth layer (no re-check in Server Action or Route Handler): CVE-2025-29927 bypass vector → **Block**
 - Server Action or API route handler missing auth/authorization check at the top → **Block**
 - Server Action or API route handler missing input validation (Zod/schema) at the top → **Block**
 - Entire database object passed to a Client Component (may contain passwords, admin flags, internal IDs) → **Block**
@@ -122,8 +122,8 @@ Apply the >80%-confidence filter before assigning severity. Consolidate related 
 
 | Highest-severity finding | Verdict |
 |--------------------------|---------|
-| Any **Block** item (CRITICAL or HIGH confidence) | **Block** — do not push; fix required |
-| Only **Warn** items (MEDIUM/LOW, no Blocks) | **Warning** — proceed with caution; note findings |
+| Any **Block** item (CRITICAL or HIGH confidence) | **Block**: do not push; fix required |
+| Only **Warn** items (MEDIUM/LOW, no Blocks) | **Warning**: proceed with caution; note findings |
 | No findings above threshold | **Approve** |
 
 A **Block** verdict from this checklist overrides a passing `/security-review` result. The orchestrator, not this skill, decides whether to halt the push.

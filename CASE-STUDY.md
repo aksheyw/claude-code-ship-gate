@@ -1,4 +1,4 @@
-# Ship Gate — a case study
+# Ship Gate: a case study
 
 **The bet:** the quality check that fails you is never the one you skip on purpose, it is the one a flag quietly turns off, so the gate worth building is one that sits where the skip flag does not exist. Ship Gate runs your tests, review, security, and secret scan before a push to your protected branch (a docs-only change runs the deterministic gates and the secret scan; the judgment gates apply to code), and because it runs above git as a pre-tool hook rather than inside it, the usual escape hatch of pushing with no-verify is not there to reach for.
 

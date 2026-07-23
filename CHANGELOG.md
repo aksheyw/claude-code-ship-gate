@@ -5,6 +5,19 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ---
 
+## [0.5.6] - 2026-07-23
+
+### Changed
+- **Finished the em-dash sweep across every published file.** v0.5.5 restored the README and the `/ship`
+  skill, but 14 other shipped files still carried them (the skills, their reference checklists, the
+  bundled reviewer agent, the trigger rule, CHANGELOG, CASE-STUDY, CONTRIBUTING). All 146 are gone; the
+  published surface is now consistent. Replacements were chosen per sentence rather than by blanket
+  substitution: a dash introducing an explanation became a colon, one before a conjunction or on a line
+  that already carried a colon became a comma, and every rewritten line was checked for comma splices and
+  punctuation artifacts. Prose only; no behaviour, no logic, no test expectations changed.
+
+---
+
 ## [0.5.5] - 2026-07-23
 
 ### Fixed
@@ -21,35 +34,35 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [0.5.4] - 2026-07-23
 
 ### Added
-- **Config-drift detection — the other half of the "no silent pass" spec.** Until now, a `.shipgate.json`
+- **Config-drift detection: the other half of the "no silent pass" spec.** Until now, a `.shipgate.json`
   that disabled a gate ("docs-only repo, tests off") could go stale as the repo grew real capability, and
   every ship would report a clean `[SKIP]` while nothing ran. `run` now cheaply checks (no execution, just
   a filename scan) whether a disabled `tests`/`lint`/`typecheck`/`build` gate's capability is actually
   present in the repo. `[DRIFT]` (no reason recorded) pauses `/ship` for an explicit acknowledgment, the
   same weight as an enabled gate with no command; `[DRIFT-ACK]` (a `gates.<gate>.reason` + optional `.since`
-  recorded) surfaces every run but does not pause — a dated, conscious decision doesn't need re-litigating
+  recorded) surfaces every run but does not pause: a dated, conscious decision doesn't need re-litigating
   on every push. A legitimately non-applicable gate stays a plain, silent `[SKIP]`.
 - `ship-gate.sh doctor` now also audits an existing `.shipgate.json` against the same detection and
   proposes a concrete fix (the real auto-detected command, or an honest "inspect manually" placeholder).
 - Schema: optional `reason`/`since` string properties on `gates.{tests,lint,typecheck,build}`.
-- **File-coverage requirement on the codeReview gate.** `codeReview` is a judgment gate — a model reads
-  the diff and returns a verdict — so on a large changeset it could review a subset and still report a
+- **File-coverage requirement on the codeReview gate.** `codeReview` is a judgment gate: a model reads
+  the diff and returns a verdict, so on a large changeset it could review a subset and still report a
   pass, with nothing asserting otherwise. New `ship-gate.sh changed-files` emits the authoritative list of
   files in the shipped change, computed in bash from git rather than from the model's reading of the diff
   (committed range + staged + unstaged + untracked; ignored files excluded; non-ASCII paths byte-exact via
   `core.quotePath=false`). `/ship` now requires every path on that list to be either reviewed or explicitly
   classified as needing no review with a stated reason, reports coverage as `N/M files`, and treats an
   unaccounted path as an INCOMPLETE gate rather than a pass. It is a manifest, never a gate: it always
-  exits 0 and never blocks a push on its own — the deterministic tier keeps exit-code semantics for gates
+  exits 0 and never blocks a push on its own: the deterministic tier keeps exit-code semantics for gates
   that actually execute something.
 
 ### Fixed
 - A `set -euo pipefail` footgun in the new detection code (a function's last-executed command being a
   false `&&` test propagates that exit status as the function's own return code, which aborts the script
-  when the caller assigns via command substitution) — caught by the test suite before it shipped.
+  when the caller assigns via command substitution): caught by the test suite before it shipped.
 - **Fail-open: an enabled gate with an empty suite array reported a pass without running (found by an
-  independent Codex review).** `"tests":{"enabled":true,"command":[]}` passed structural validation —
-  jq's `all` is vacuously true over `[]` — after which the runner warned "empty suite list" and returned
+  independent Codex review).** `"tests":{"enabled":true,"command":[]}` passed structural validation, 
+  jq's `all` is vacuously true over `[]`: after which the runner warned "empty suite list" and returned
   success, so an ENABLED deterministic gate exited 0 having executed nothing. An enabled gate with nothing
   to run is a config error and now fails closed, matching the rule already applied to every other
   malformed structure. **Behaviour change:** a config carrying `command: []` now aborts (exit 2) instead
@@ -114,7 +127,7 @@ A security patch for the push-block hook, closing the refspec-source fail-open r
 
 ### Known boundary (documented, not fixed)
 - The push-detection parser is O(n²) on backslash-newline continuations (pre-existing since before 0.5.0);
-  a hand-crafted ~700 KB command can still make the gate slow. Documented in the README scope boundary —
+  a hand-crafted ~700 KB command can still make the gate slow. Documented in the README scope boundary: 
   ship-gate is a guardrail against accidental and fast-agent pushes of your own code, not a sandbox against
   a determined adversary crafting oversized commands.
 
@@ -161,8 +174,8 @@ act on in 15 seconds, and honest positioning for bare-skill installs.
 
 ## [0.4.0] - 2026-06-26
 
-Multi-suite / area-conditional deterministic gates — so a repo with more than one test suite can't get a
-false "tests PASS" by running only the first one — plus config-time tooling to find the suites you'd miss.
+Multi-suite / area-conditional deterministic gates, so a repo with more than one test suite can't get a
+false "tests PASS" by running only the first one, plus config-time tooling to find the suites you'd miss.
 
 ### Added
 
@@ -172,36 +185,36 @@ false "tests PASS" by running only the first one — plus config-time tooling to
   fails the gate.** A repo with a root suite, a `functions/` suite, and a Firestore-rules suite now runs
   every relevant one instead of silently skipping all but the first.
   - `when` entries are git pathspecs: `*` spans `/` (so `*.rules` matches at any depth, `functions`
-    matches everything under `functions/`); brace globs like `{a,b}` aren't supported — list separately.
+    matches everything under `functions/`); brace globs like `{a,b}` aren't supported: list separately.
   - Scope is **fail-safe**: if the shipped change-set can't be determined, every `when`-suite runs (it can
     over-run, never silently skip). **Staged and untracked** new files count, since gates run before commit.
   - **Malformed config fails closed; unevaluable scope fails safe.** A bare-string array, or a suite with an
     empty/missing `command`, fails the gate (never a silent pass). An unsupported or invalid `when` pathspec
     (a brace glob like `*.{a,b}`, or bad pathspec magic) is treated as indeterminate scope, so the suite
-    runs — never silently skipped.
+    runs: never silently skipped.
   - **Runtime structural validation** (the schema is editor-only). The runner now rejects, fail-closed, any
     config shape that would otherwise silently disable or skip a gate: a non-object `gates` or gate, a
     non-boolean `enabled`, a `command` that is not null/string/suite-array, or a non-string-array `when`.
     `when` pathspecs are matched relative to the repo root (so a `.shipgate.json` in a subdir scopes
     correctly), not the directory `/ship` was run from.
-- **`doctor` — uncovered-suite detection.** New `ship-gate.sh doctor` (which `/ship-init` runs and you can
-  run any time) flags suites a single `tests.command` would silently skip — a nested package with its own
+- **`doctor`: uncovered-suite detection.** New `ship-gate.sh doctor` (which `/ship-init` runs and you can
+  run any time) flags suites a single `tests.command` would silently skip: a nested package with its own
   test script, an extra/named test-runner config (e.g. `vitest.config.functions.ts`), an e2e suite, a
-  `*.rules` security-rules file — and offers to wire each as a `when`-conditional suite. Advisory: it prints
+  `*.rules` security-rules file, and offers to wire each as a `when`-conditional suite. Advisory: it prints
   `[WARN]` lines and always exits 0; it never blocks a push.
 - **CI-awareness.** `detect` now reports a `ci` field; `doctor`, `/ship-init`, and `/ship` warn when no CI is
-  configured — "this gate is your only automated check before prod, keep suite coverage aggressive."
+  configured: "this gate is your only automated check before prod, keep suite coverage aggressive."
 - **Deploy-connected build pre-flight.** When a deploy target is detected (Vercel / Netlify / Firebase /
   Fly.io / Render), `/ship-init` now scaffolds `gates.build.enabled: true` so a broken build is caught
   locally before it breaks the deploy. The runtime default stays `false` (existing configs are unchanged).
-- **Monorepo example.** New `examples/monorepo.shipgate.json` — a self-contained multi-suite showcase (root
+- **Monorepo example.** New `examples/monorepo.shipgate.json`: a self-contained multi-suite showcase (root
   app + `functions/` package + Firestore rules, per-area `when`-conditional suites, deploy-connected build).
 
 ### Changed
 
-- A plain-string `command` behaves exactly as before — full back-compat. `ship-gate.sh detect` now reports
+- A plain-string `command` behaves exactly as before: full back-compat. `ship-gate.sh detect` now reports
   a `<multi-suite: N suites>` placeholder for an array command instead of raw JSON.
-- **`regression` relabeled as an advisory strategy pointer.** It was never an executable check — the runner
+- **`regression` relabeled as an advisory strategy pointer.** It was never an executable check: the runner
   never ran a command for it. Enabling it surfaces the `ai-regression-testing` strategy skill for guidance
   on test-affecting changes; it never runs a command and never blocks. For regression *suites* you want
   executed, add them to a multi-suite `gates.tests.command`. Schema + docs only; no behavior change.
@@ -211,10 +224,10 @@ false "tests PASS" by running only the first one — plus config-time tooling to
 - **Actionable error for the compound-command footgun.** If the pass-marker write and the `git push` are
   chained in a *single* command (`… write-marker … && git push …`), the push can never pass on its own
   authority: the push-block is a PreToolUse hook, so it reads the marker *before* the command runs and the
-  same-command write hasn't taken effect yet — producing a baffling generic "pass is for a different commit"
+  same-command write hasn't taken effect yet: producing a baffling generic "pass is for a different commit"
   deny. The hook now detects this shape (an already-confirmed protected-branch push whose text also carries
   both the `write-marker` and `ship-gate` tokens) and, **on a marker-validation failure**, surfaces a
-  specific fix — run them as two separate commands — which `/ship` already does. The message is gated on the
+  specific fix: run them as two separate commands, which `/ship` already does. The message is gated on the
   failure path, so a push that *already* holds a valid pass is allowed regardless of those tokens (no
   false-deny). The new HARD RULE is documented in step 9 of the `ship` skill.
 
@@ -299,7 +312,7 @@ Production-readiness hardening of the push-block hook.
 ### Notes
 
 - Scope boundary (documented, by design): a guardrail against accidental and normal un-gated
-  pushes, **not** a sandbox — git invoked via a wrapper (`bash -c`, `eval`, `sudo`, …) or
+  pushes, **not** a sandbox: git invoked via a wrapper (`bash -c`, `eval`, `sudo`, …) or
   obscured by I/O redirection is out of scope.
 
 ---
