@@ -1,4 +1,4 @@
-# Ship Gate — a pre-push quality gate for Claude Code that an agent can't skip with a flag
+# Ship Gate: a pre-push quality gate for Claude Code that an agent can't skip with a flag
 
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE) [![CI](https://github.com/aksheyw/claude-code-ship-gate/actions/workflows/ci.yml/badge.svg)](https://github.com/aksheyw/claude-code-ship-gate/actions/workflows/ci.yml) [![release](https://img.shields.io/github/v/release/aksheyw/claude-code-ship-gate)](https://github.com/aksheyw/claude-code-ship-gate/releases) ![Claude Code plugin](https://img.shields.io/badge/Claude%20Code-plugin-8A2BE2.svg)
 
@@ -9,7 +9,7 @@ Ship Gate is a Claude Code plugin that sits between your AI and your protected b
 
 ![Ship Gate in action: asked to skip the gates and push straight to main, Claude declines to bypass and points to /ship; "ship it" then runs the gates, writes the marker, and pushes.](assets/demo.gif)
 
-*Asked to "just push to main and skip the gates," Claude won't bypass — it runs `/ship`, the gates pass (a docs-only change here, so the heavy ones auto-skip), and it pushes. Every frame is a real `/ship` run.*
+*Asked to "just push to main and skip the gates," Claude won't bypass: it runs `/ship`, the gates pass (a docs-only change here, so the heavy ones auto-skip), and it pushes. Every frame is a real `/ship` run.*
 
 The full story of how this gate was designed and hardened is in the product case study: [CASE-STUDY.md](CASE-STUDY.md).
 
@@ -99,8 +99,8 @@ Then I walked back the opt-in decision, but only partly. The footgun was never t
 | `ship-security` | Skill | **Security gate.** Applies a distilled security checklist to the diff; opportunistically augments with `/security-review`. |
 | `ship-reviewer` | Agent | Fallback reviewer used when `/code-review` is unavailable; embeds all review dimensions inline. |
 | Push-block hook | PreToolUse hook | `hooks/hooks.json` + `scripts/check-push.sh`. In every gated repo, denies `git push` to the protected branch without a valid marker. This is what takes the one-keystroke skip off the table. |
-| Trigger rule | Rule | `rules/shipgate-trigger.md` — routes plain-language ship intent ("ship it") to `/ship`. Installed to `~/.claude/rules` by `install-local.sh`; marketplace users add a one-liner (see below). |
-| Deterministic runner | Script | `scripts/ship-gate.sh detect\|run\|doctor\|write-marker\|protected-branch\|disable\|enable\|status` — runs the gates, flags uncovered test suites and config drift (`doctor`), emits the file-coverage manifest (`changed-files`), resolves the protected branch, toggles per-repo gating; CI-reusable. |
+| Trigger rule | Rule | `rules/shipgate-trigger.md`: routes plain-language ship intent ("ship it") to `/ship`. Installed to `~/.claude/rules` by `install-local.sh`; marketplace users add a one-liner (see below). |
+| Deterministic runner | Script | `scripts/ship-gate.sh detect\|run\|doctor\|changed-files\|write-marker\|protected-branch\|disable\|enable\|status`: runs the gates, flags uncovered test suites and stale config (`doctor`), emits the file-coverage manifest (`changed-files`), resolves the protected branch, toggles per-repo gating; CI-reusable. |
 | JSON Schema | Config | `schema/shipgate.schema.json` (Draft-07) for editor autocomplete on `.shipgate.json`. |
 
 Everything deterministic lives in dependency-free **bash + jq + awk**; the skills hold prompt logic only. The full test suite is 447 assertions across `scripts/test/*_test.sh`, no framework required.
@@ -117,7 +117,7 @@ Three things make me trust it in practice, and the third is the one that matters
 - **On by default, with four ways out.** A personal install gates every repo; a marketplace install gates only repos with a `.shipgate.json`. Whichever you use, you can step out at four levels: a session bypass (`SHIPGATE_DISABLE=1`), a machine-wide off switch (`enabled:false` in `~/.shipgate.json`), a per-repo pause (`/ship off`), or `--no-default-on` at install time. A repo you've stepped out of is never gated, and in opt-in mode a repo that never adds `.shipgate.json` is never touched, so an install can't hijack a project you decided not to cover.
 - **Marker-bound.** A push is allowed only when `.git/shipgate/last-pass.json` records the **exact commit** about to be pushed, on the right branch, within a configurable TTL (default 900s). Pass the gates via `/ship` and the marker is written for you; otherwise it isn't there.
 
-**Scope boundary (deliberate):** the gate matches `git push` as a *simple command*, honoring env-assignment prefixes, git global options, and bash quoting/escaping. It does **not** chase a push hidden inside a wrapper (`bash -c`, `eval`, `$(...)`, `sudo`, `xargs`, …) or obscured by I/O redirection — closing those is unbounded shell-reimplementation that tends to introduce *new* holes. One seam remains different in kind (a bounded fix, tracked for a hardening release): the hook judges a push against the repo the session is standing in (a push aimed at a different repo via `git -C` is evaluated by the current repo's gating, not the target's). Two narrow denial-of-service edges are documented rather than closed, because triggering them needs a hand-crafted multi-hundred-kilobyte push command — which, given the only party who can feed this hook a command is you or your agent pushing your own code, is not a realistic threat: a push carrying a quoted or backslash-hidden refspec (`"feature:main"`, `feature:ma\in`) is not matched, and a command padded with hundreds of thousands of backslash-newline line-continuations can make the gate slow enough to time out. Ship Gate is a guardrail for the normal and the accidental, backed by the marker workflow, not a sandbox against a determined adversary. (The `src:dst` refspec-source hole that shipped in 0.5.0 **is** closed in 0.5.1 — a legitimate `feature:main` inside a valid pass window no longer certifies.)
+**Scope boundary (deliberate):** the gate matches `git push` as a *simple command*, honoring env-assignment prefixes, git global options, and bash quoting/escaping. It does **not** chase a push hidden inside a wrapper (`bash -c`, `eval`, `$(...)`, `sudo`, `xargs`, …) or obscured by I/O redirection, because closing those is unbounded shell-reimplementation that tends to introduce *new* holes. One seam remains different in kind (a bounded fix, tracked for a hardening release): the hook judges a push against the repo the session is standing in (a push aimed at a different repo via `git -C` is evaluated by the current repo's gating, not the target's). Two narrow denial-of-service edges are documented rather than closed, because triggering them needs a hand-crafted multi-hundred-kilobyte push command, which, given the only party who can feed this hook a command is you or your agent pushing your own code, is not a realistic threat: a push carrying a quoted or backslash-hidden refspec (`"feature:main"`, `feature:ma\in`) is not matched, and a command padded with hundreds of thousands of backslash-newline line-continuations can make the gate slow enough to time out. Ship Gate is a guardrail for the normal and the accidental, backed by the marker workflow, not a sandbox against a determined adversary. (The `src:dst` refspec-source hole that shipped in 0.5.0 **is** closed in 0.5.1: a legitimate `feature:main` inside a valid pass window no longer certifies.)
 
 ---
 
@@ -127,19 +127,19 @@ Here's what `/ship --dry-run` prints. The shape is exactly what the orchestrator
 
 ```
 ## Ship Gate Summary
-[PASS] tests — 248 passed (npx vitest run)
-[PASS] lint / typecheck — clean / clean
-[SKIP] build — skipped (disabled)
-[PASS] secretScan — clean
-[PASS] codeReview — Warning carried forward (resolved via: ship-review → /code-review)
-[PASS] security — Approve (resolved via: ship-security)
-[USER] uat — 80% UI impact — user decision: required
-[SKIP] regression — skipped: not test-affecting
-[SKIP] audit / deep — not requested
+[PASS] tests: 248 passed (npx vitest run)
+[PASS] lint / typecheck: clean / clean
+[SKIP] build: skipped (disabled)
+[PASS] secretScan: clean
+[PASS] codeReview: Warning carried forward (resolved via: ship-review → /code-review)
+[PASS] security: Approve (resolved via: ship-security)
+[USER] uat: 80% UI impact (user decision: required)
+[SKIP] regression: skipped (not test-affecting)
+[SKIP] audit / deep: not requested
 Branch: feature/checkout-v2   Target: origin/main
 ```
 
-`--dry-run` stops at the summary: it writes no marker and pushes nothing. Without `--dry-run`, an imperative `/ship` (or "ship it") pushes on its own once every required gate is green. Not in this example, though: UAT is `[USER]`-required and unsatisfied, so it pauses for your call first. Auto-push only ever proceeds on a clean run with no open decision; the imperative command is the authorization, and the push-block hook still backstops anything it misreads. And what the deterministic runner actually prints (here, run in this very repo, which has no test command configured) shows the **no-silent-pass** safety in action:
+`--dry-run` stops at the summary, so it writes no marker and pushes nothing. Without `--dry-run`, an imperative `/ship` (or "ship it") pushes on its own once every required gate is green. Not in this example, though: UAT is `[USER]`-required and unsatisfied, so it pauses for your call first. Auto-push only ever proceeds on a clean run with no open decision; the imperative command is the authorization, and the push-block hook still backstops anything it misreads. And what the deterministic runner actually prints (here, run in this very repo, which has no test command configured) shows the **no-silent-pass** safety in action:
 
 ```
 $ bash plugins/ship-gate/scripts/ship-gate.sh run
@@ -153,13 +153,15 @@ $ bash plugins/ship-gate/scripts/ship-gate.sh run
 
 An *enabled* gate with no command becomes a visible `[WARN]` the orchestrator must surface and you must acknowledge, never a silent green check.
 
-**The other half of the same problem: a *disabled* gate the repo has quietly outgrown.** A `.shipgate.json` committed once ("docs-only repo, tests off") can go stale — the repo grows a real test suite and the config never catches up, so every ship reports a clean `[SKIP]` while nothing runs. `run` checks this cheaply (no execution, just a filename scan) whenever a command gate is disabled:
+**The other half of the same problem: a *disabled* gate the repo has quietly outgrown.** A `.shipgate.json` committed once ("docs-only repo, tests off") can go stale as the repo grows a real test suite, so every ship reports a clean `[SKIP]` while nothing runs. When a command gate is disabled, `run` checks cheaply (no execution, just a filename scan against git's view of the repo) whether that capability now exists:
 
 ```
-[DRIFT] tests: disabled in config, but 12 test file(s) detected (e.g. tests/test_api.py) — run '/ship doctor' to review, or set gates.tests.reason if this is intentional
+[DRIFT] tests: disabled in config, but 12 test file(s) detected (e.g. tests/test_api.py): run '/ship doctor' to review, or set gates.tests.reason if this is intentional
 ```
 
-A `[DRIFT]` line pauses `/ship` for an explicit acknowledgment, same as the missing-command `[WARN]` above. If you record *why* the gate is off — `gates.tests.reason` (+ optional `gates.tests.since`) in `.shipgate.json` — it downgrades to `[DRIFT-ACK]`: still shown every ship (so the reason is never buried in a commit message again), but it no longer pauses, since a dated, conscious decision doesn't need re-litigating on every push. A legitimately non-applicable gate (nothing detected) stays a plain, silent `[SKIP]` either way. `ship-gate.sh doctor` audits an existing `.shipgate.json` against the same detection and proposes the fix.
+A `[DRIFT]` line pauses `/ship` for an explicit acknowledgment, the same weight as the missing-command `[WARN]` above. Record *why* the gate is off (`gates.tests.reason`, plus an optional `gates.tests.since`) and it becomes `[DRIFT-ACK]`: still printed every ship, so the premise is never buried in a commit message again, but no longer a pause, because a dated and conscious decision does not need re-litigating on every push. A legitimately non-applicable gate stays a plain, silent `[SKIP]`. `ship-gate.sh doctor` audits an existing config the same way and proposes the fix.
+
+**Reviews have to cover every file.** `codeReview` is a judgment gate, so on a large changeset a model can review a subset and still report a pass. `ship-gate.sh changed-files` emits the authoritative list of files in the change, computed from git rather than from the model's reading of the diff, and `/ship` requires every path on it to be either reviewed or explicitly excused with a reason. Coverage is reported as `N/M files`, and an unaccounted path makes the gate incomplete rather than passed.
 
 ---
 
@@ -169,7 +171,7 @@ A `[DRIFT]` line pauses `/ship` for an explicit acknowledgment, same as the miss
 
 **Pick one mode and stick to it.** Running both installs duplicate commands.
 
-### Mode A — Personal install (all your projects)
+### Mode A: Personal install (all your projects)
 
 Installs bare-named personal skills (`/ship`, `/ship-init`, `/ship-review`, `/ship-security`), copies the `ship-reviewer` agent, and merges the push-block hook into `~/.claude/settings.json`. Any existing `~/.claude/skills/ship.md` is backed up to `ship.md.bak` first. It also installs the trigger rule to `~/.claude/rules/shipgate-trigger.md` (so "ship it" routes to the gate) and turns on default-on by adding `defaultEnabled:true` to `~/.shipgate.json`, merged without touching any other keys there.
 
@@ -183,7 +185,7 @@ bash install-local.sh --yes --no-default-on  # install, but keep Ship Gate opt-i
 
 > Installed skills reference this repo's scripts by absolute path. If you **move** this repo, re-run `install-local.sh`. The hook entry in `settings.json` is added once. If a ship-gate hook with an old path is already present, remove that entry before re-running so the new path takes effect.
 
-### Mode B — Marketplace / OSS install
+### Mode B: Marketplace / OSS install
 
 ```
 /plugin marketplace add aksheyw/claude-code-ship-gate
@@ -240,11 +242,11 @@ Ship Gate is driven by a `.shipgate.json` at your project root.
 | `mainBranch` | `"main"` | Protected branch that `/ship` targets and the hook guards. Also honored in the global `~/.shipgate.json` and via `SHIPGATE_MAIN_BRANCH`; otherwise auto-detected from `origin/HEAD`, falling back to `main`/`master`. |
 | `enabled` (top-level) | `true` | Set `false` to pause enforcement for this repo while keeping its config. In the global `~/.shipgate.json`, `false` is a machine-wide off switch. |
 | `defaultEnabled` (global only) | `false` | **In `~/.shipgate.json` only.** `true` gates every repo that has no per-repo `.shipgate.json` (default-on). Set by `install-local.sh`; ignored inside a per-repo file. |
-| `gates.*.command` | `null` (auto-detect) | A string, `null` (auto-detect), or an **array** of `{command, when}` suites for multi-suite repos — see [Multi-suite test gates](#multi-suite-test-gates-monorepos). |
+| `gates.*.command` | `null` (auto-detect) | A string, `null` (auto-detect), or an **array** of `{command, when}` suites for multi-suite repos (see [Multi-suite test gates](#multi-suite-test-gates-monorepos)). |
 | `gates.build.enabled` | `false` | Build gate is opt-in; flip to `true` when ready. |
 | `gates.*.upgrade` | `null` | External skill to prefer over the bundled default when installed. |
-| `gates.{tests,lint,typecheck,build}.reason` / `.since` | (unset) | Why a command gate is disabled, and when that was recorded. When set, a detected config-drift signal downgrades from a pausing `[DRIFT]` to an informational `[DRIFT-ACK]` — see "Example output" above. |
-| `regression.enabled` | `false` | Advisory only: surfaces the `ai-regression-testing` strategy skill on test-affecting changes (guidance — it runs no command and never blocks). For regression *suites* you want actually executed, add them to a multi-suite `gates.tests.command`. |
+| `gates.{tests,lint,typecheck,build}.reason` / `.since` | (unset) | Why a command gate is disabled, and when that was recorded, so the premise is auditable at ship time. When set, a config-drift signal becomes an informational `[DRIFT-ACK]` instead of a pausing `[DRIFT]`. |
+| `regression.enabled` | `false` | Advisory only: surfaces the `ai-regression-testing` strategy skill on test-affecting changes (guidance: it runs no command and never blocks). For regression *suites* you want actually executed, add them to a multi-suite `gates.tests.command`. |
 | `hotfix.skipGates` | `["uat","regression","audit","deep"]` | Gates skipped on `--hotfix`. Tests, codeReview, secretScan, and security are always kept. |
 | `markerTtlSeconds` | `900` | How long a gate-pass marker stays valid before it expires. |
 
@@ -252,7 +254,7 @@ A partial config is valid: anything you omit falls back to the bundled defaults 
 
 ### Multi-suite test gates (monorepos)
 
-A single `command` runs one suite. On a repo with more than one test suite, that silently leaves the others unrun while still reporting "tests PASS" — a false all-clear. So `tests` (and `lint`/`typecheck`/`build`) also accept an **array of suites**: each is an object with a `command` and an optional `when` (git pathspecs). A suite runs only if a changed file matches its `when`; omit `when` to always run it. **Any in-scope suite that fails, fails the gate.**
+A single `command` runs one suite. On a repo with more than one test suite, that silently leaves the others unrun while still reporting "tests PASS", a false all-clear. So `tests` (and `lint`/`typecheck`/`build`) also accept an **array of suites**: each is an object with a `command` and an optional `when` (git pathspecs). A suite runs only if a changed file matches its `when`; omit `when` to always run it. **Any in-scope suite that fails, fails the gate.**
 
 ```json
 "tests": { "enabled": true, "command": [
@@ -264,12 +266,12 @@ A single `command` runs one suite. On a repo with more than one test suite, that
 
 The root suite always runs; the `functions/` suite runs only when a file under `functions/` changed; the rules suite runs only when a `*.rules` file changed. A few things worth knowing:
 
-- **`when` entries are git pathspecs.** `*` spans `/`, so `*.rules` matches at any depth and `functions` matches everything under `functions/`. Brace globs like `{tsx,jsx}` are not supported — list them separately (`*.tsx`, `*.jsx`).
+- **`when` entries are git pathspecs.** `*` spans `/`, so `*.rules` matches at any depth and `functions` matches everything under `functions/`. Brace globs like `{tsx,jsx}` are not supported, so list them separately (`*.tsx`, `*.jsx`).
 - **Staged and untracked files count.** Gates run before the commit, so a brand-new suite's files (staged or untracked) put its suite in scope.
 - **Scope is fail-safe.** If the shipped change-set can't be determined, every `when`-suite runs. It can over-run (slower), never silently skip.
 - **A plain string still behaves exactly as before.** On older plugin versions, a `scripts/ship-tests.sh` wrapper that chains the suites by hand is the equivalent fallback.
 
-To find suites you'd otherwise miss, run `ship-gate.sh doctor` (and `/ship-init` runs it for you): it flags a nested package with its own test script, an extra/named test-runner config, an e2e suite, or a `*.rules` file the single command wouldn't touch — warns if no CI is configured — and, against an existing `.shipgate.json`, flags **config drift** (a disabled gate the repo has since grown real capability for) and proposes the concrete fix. It's advisory and never blocks. A worked monorepo config is in [`examples/monorepo.shipgate.json`](plugins/ship-gate/examples/monorepo.shipgate.json).
+To find suites you'd otherwise miss, run `ship-gate.sh doctor` (and `/ship-init` runs it for you): it flags a nested package with its own test script, an extra/named test-runner config, an e2e suite, or a `*.rules` file the single command wouldn't touch, warns if no CI is configured, and (against an existing `.shipgate.json`) flags config drift, a disabled gate the repo has since grown real capability for, proposing the concrete fix. It's advisory and never blocks. A worked monorepo config is in [`examples/monorepo.shipgate.json`](plugins/ship-gate/examples/monorepo.shipgate.json).
 
 ---
 
@@ -306,7 +308,7 @@ Changed files are classified into buckets (docs, ui, logic, security-sensitive, 
 | security | any code/config/dependency file changed; deeper checklist when a `scoping.security` path is touched |
 | uat | confidence-based: ui → required, logic → recommended, lib/api → optional, analytics/docs → skip |
 | audit / deep | opt-in via `--audit` / `--deep`; suggested past size/risk thresholds |
-| regression | advisory strategy pointer (guidance, not an executable check) — only when `regression.enabled` **and** the change is test-affecting |
+| regression | advisory strategy pointer (guidance, not an executable check), only when `regression.enabled` **and** the change is test-affecting |
 
 **Docs-only push** (every changed path matches `**/*.md`): deterministic gates + secretScan run; all judgment gates skip. **`--hotfix`** skips uat/regression/audit/deep but keeps tests, codeReview, secretScan, and security. Full matrix: `plugins/ship-gate/skills/ship/references/scenario-matrix.md`.
 
@@ -321,7 +323,7 @@ Each judgment gate resolves in three tiers: a configured **external upgrade** (i
 | codeReview | `ship-review` skill + `ship-reviewer` agent fallback | `code-reviewer` agent; `coderabbit`; or any `gates.codeReview.upgrade` |
 | security | `ship-security` skill | `vibe-security`, `/security-review`; or any `gates.security.upgrade` |
 | uat | manual confirmation prompt | `/verify` + `/run` if your setup has them |
-| regression | off by default; an advisory strategy pointer only — runs no command, never blocks | e.g. `ai-regression-testing` |
+| regression | off by default; an advisory strategy pointer only: runs no command, never blocks | e.g. `ai-regression-testing` |
 | audit / deep | bundled checklists (`references/audit-checklist.md` / `deep-review-lenses.md`) applied directly | `/deep-review` or `heavyGates.*.upgrade` skills if installed |
 
 None of the external skills above ship with this plugin; every gate works with only what's in this repo, and an installed external simply upgrades it.
@@ -367,11 +369,11 @@ claude plugin validate .
 
 Part of a small family of opinionated Claude Code tools:
 
-- [**claude-code-deep-review**](https://github.com/aksheyw/claude-code-deep-review) — the 14-lens iterative deep-review methodology Ship Gate's `--deep` gate distills from. Found 14 production bugs (2 ship-stoppers) on its first use, and 7 fail-opens in *this* very plugin.
-- [**claude-code-rules**](https://github.com/aksheyw/claude-code-rules) — opinionated global rules (honesty / earned-confidence, TDD, immutability, branch strategy) that shaped how these gates are wired.
-- [**context-bridge**](https://github.com/aksheyw/context-bridge) — resume Claude Code sessions warm: a per-project wiki + generated handoff prompt to stop cross-session amnesia.
-- [**claude-code-pm-agents**](https://github.com/aksheyw/claude-code-pm-agents) — seven subagents covering the product-builder lifecycle (PRDs, growth, brand, ASO, SEO, YouTube, comms).
-- [**claude-code-learned-skills**](https://github.com/aksheyw/claude-code-learned-skills) — Docker / SSH / VPS skills captured from real debugging sessions.
+- [**claude-code-deep-review**](https://github.com/aksheyw/claude-code-deep-review): the 14-lens iterative deep-review methodology Ship Gate's `--deep` gate distills from. Found 14 production bugs (2 ship-stoppers) on its first use, and 7 fail-opens in *this* very plugin.
+- [**claude-code-rules**](https://github.com/aksheyw/claude-code-rules): opinionated global rules (honesty / earned-confidence, TDD, immutability, branch strategy) that shaped how these gates are wired.
+- [**context-bridge**](https://github.com/aksheyw/context-bridge): resume Claude Code sessions warm: a per-project wiki + generated handoff prompt to stop cross-session amnesia.
+- [**claude-code-pm-agents**](https://github.com/aksheyw/claude-code-pm-agents): seven subagents covering the product-builder lifecycle (PRDs, growth, brand, ASO, SEO, YouTube, comms).
+- [**claude-code-learned-skills**](https://github.com/aksheyw/claude-code-learned-skills): 12 skills captured from real debugging and research sessions (Docker/SSH/VPS, ML pipelines, prompting guides, quality tooling, a project wiki).
 
 ---
 
@@ -379,10 +381,10 @@ Part of a small family of opinionated Claude Code tools:
 
 The bundled reference files (`code-review-checklist.md`, `security-checklist.md`, `audit-checklist.md`, `deep-review-lenses.md`) **distill** best practices from the projects below. You do **not** need any of them installed; the checklists ship inside the plugin:
 
-- **vibe-security** — security review skill
-- **audit** — codebase audit skill
-- **deep-review** — iterative 14-lens deep review methodology
-- **code-reviewer** agent — embedded review dimensions
+- **vibe-security**: security review skill
+- **audit**: codebase audit skill
+- **deep-review**: iterative 14-lens deep review methodology
+- **code-reviewer** agent: embedded review dimensions
 - [**gitleaks**](https://github.com/gitleaks/gitleaks) and [**OWASP**](https://owasp.org)
 
 **Optional upgrades** Ship Gate invokes only when you configure them and they're installed: `vibe-security`, `code-reviewer` / `coderabbit`, `ai-regression-testing`, `audit` / `deep-review`. **Companion plugins** that run on their own: `security-guidance`, `aikido`, `42crunch`, `sensitive-canary`. All unversioned; see upstream.

@@ -81,33 +81,33 @@ reports WITHOUT pushing.
    but scan for `[DRIFT]` and `[DRIFT-ACK]` lines too, which mean the gate is disabled while the repo now
    looks like it has that capability (test files, a lint config, a tsconfig, a build script detected where
    there was none when the gate was turned off). These are NOT interchangeable with a plain `[SKIP]`:
-   - **`[DRIFT] <gate>: ...`** (no `reason` recorded in `.shipgate.json`) — treat this exactly like the
+   - **`[DRIFT] <gate>: ...`** (no `reason` recorded in `.shipgate.json`): treat this exactly like the
      missing-command case above: PAUSE, surface it, and require an explicit acknowledgment before proceeding
-     (or point at `/ship doctor`, which proposes a concrete config fix). Do not proceed past it silently —
+     (or point at `/ship doctor`, which proposes a concrete config fix). Do not proceed past it silently,
      this is precisely the gap that let a 20-commit push through a repo with 174 real, unrun tests.
-   - **`[DRIFT-ACK] <gate>: ...`** (a `reason` IS recorded on the gate) — do NOT pause. Include it verbatim
+   - **`[DRIFT-ACK] <gate>: ...`** (a `reason` IS recorded on the gate): do NOT pause. Include it verbatim
      in the Gate Status Summary (step 7) so the recorded reason is visible every ship, not buried in a
      commit message from weeks ago, but a dated, conscious decision does not need re-litigating on every
      push. (Argued in DECISIONS.md: pausing on every `[DRIFT-ACK]` would train people to click through the
      line, which is worse than the silent-skip this feature exists to fix.)
 
 4. **Judgment gates** — first honor the config: a gate whose `gates.<gate>.enabled` is `false` in
-   `.shipgate.json` is SKIPPED (report `[SKIP] <gate> — disabled in config`), same as the deterministic
+   `.shipgate.json` is SKIPPED (report `[SKIP] <gate> (disabled in config)`), same as the deterministic
    gates. For the rest, run each only when the scenario matrix says it applies; resolve every one
    upgrade → bundled default → manual (warn once on a missing optional upgrade, then fall back):
    - **codeReview** (any non-docs code file changed): if `gates.codeReview.upgrade` is set and that
      skill/agent is installed, use it; else invoke the bundled `ship-gate:ship-review` skill (it runs
      `/code-review` plus the distilled checklist); if even `/code-review` is unavailable, fall back to
      the bundled `ship-reviewer` agent via Task. STOP on a **Block** verdict; carry Warnings into the summary.
-     **FILE-COVERAGE REQUIREMENT — a review that skipped files is not a passed gate.** Before accepting any
+     **FILE-COVERAGE REQUIREMENT: a review that skipped files is not a passed gate.** Before accepting any
      codeReview verdict, get the deterministic manifest:
-     `bash "${CLAUDE_PLUGIN_ROOT}/scripts/ship-gate.sh" changed-files .` — one path per line, computed in
+     `bash "${CLAUDE_PLUGIN_ROOT}/scripts/ship-gate.sh" changed-files .`: one path per line, computed in
      bash from git, NOT from your reading of the diff. That list is the denominator. The reviewer must
      account for **every** path on it: either reviewed, or explicitly classified as needing no review (a
      lockfile, a generated file, a pure rename, a binary asset) **with the reason stated**. Report coverage
      as `N/M files` in the summary. If any path is unaccounted for, the gate is **INCOMPLETE, not passed**:
      say which files were missed, review those specifically, and only then accept the verdict. Never
-     accept "looks good overall" over a subset of a large changeset — that is the failure this exists to
+     accept "looks good overall" over a subset of a large changeset: that is the failure this exists to
      stop. (A docs-only change skips judgment gates entirely per step 2, so this does not apply there.)
    - **security** (any code/config/dependency file changed; use the **deeper** checklist when a
      `scoping.security` path is touched): if `gates.security.upgrade` is installed, use it; else invoke
@@ -147,14 +147,14 @@ reports WITHOUT pushing.
    keep `audit / deep` on their own opt-in line:
    ```
    ## Ship Gate Summary
-   [PASS] tests — <result>
-   [PASS] lint / typecheck / build — <result, "skipped (disabled)", or "DRIFT-ACK: disabled (reason: ...)">
-   [PASS] secretScan — clean
-   [PASS] codeReview — <verdict>, coverage <N>/<M> files (resolved via: <upgrade|ship-review|manual>)
-   [PASS] security — <verdict> (resolved via: <upgrade|ship-security|manual>)
-   [USER] uat — <confidence>% UI impact — user decision: <required|skipped>
-   <[PASS]|[FAIL]|[SKIP]> regression — <ran: result | skipped: disabled | skipped: not test-affecting>
-   <[PASS]|[FAIL]|[SKIP]> audit / deep — <ran | not requested>
+   [PASS] tests: <result>
+   [PASS] lint / typecheck / build: <result, "skipped (disabled)", or "DRIFT-ACK: disabled (reason: ...)">
+   [PASS] secretScan: clean
+   [PASS] codeReview: <verdict>, coverage <N>/<M> files (resolved via: <upgrade|ship-review|manual>)
+   [PASS] security: <verdict> (resolved via: <upgrade|ship-security|manual>)
+   [USER] uat: <confidence>% UI impact, user decision: <required|skipped>
+   <[PASS]|[FAIL]|[SKIP]> regression: <ran: result | skipped: disabled | skipped: not test-affecting>
+   <[PASS]|[FAIL]|[SKIP]> audit / deep: <ran | not requested>
    Branch: <branch>   Target: origin/<protected-branch>
    ```
    If `--dry-run` — or a QUESTION/NEGATION invoked this ("should we ship?", "is this ready?", "don't ship yet") —

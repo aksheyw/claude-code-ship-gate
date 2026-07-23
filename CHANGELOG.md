@@ -5,6 +5,19 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ---
 
+## [0.5.5] - 2026-07-23
+
+### Fixed
+- **Restored a docs pass that v0.5.4 reverted.** Commit `c543f8c` (em-dashes removed from the README and
+  the `/ship` skill, a stale companion-repo skill count corrected, gate-output examples aligned with what
+  the runner actually prints) was authored directly on the public repo and never existed in the
+  development tree. Because a release rebuilds the published tree from that development tree, v0.5.4
+  silently reverted all of it. The changes now live in the development repo, so they survive future
+  releases. Same class of problem as `CASE-STUDY.md` in v0.5.0: anything edited only on the public side
+  is lost at the next release unless it is brought back first.
+
+---
+
 ## [0.5.4] - 2026-07-23
 
 ### Added
