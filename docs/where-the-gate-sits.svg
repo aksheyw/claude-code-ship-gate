@@ -1,0 +1,80 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 422" width="900" height="422" role="img" aria-labelledby="t d">
+<title id="t">Where the gate sits</title>
+<desc id="d">A normal git pre-push hook runs inside git, so the --no-verify flag switches it off and unchecked code lands on main. Ship Gate runs before git starts, so the flag never reaches anything, and the push is denied unless the gates have passed for that exact commit. It gates what Claude pushes to the protected branch; a push wrapped in bash -c is not chased, and every gate is switchable per project.</desc>
+
+<style>
+  .f { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
+  .m { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-variant-ligatures: none; }
+  .h { font-size: 15px; font-weight: 700; }
+  .b { font-size: 13.5px; font-weight: 600; }
+  .s { font-size: 12px; }
+  .xs { font-size: 10.5px; }
+  .rowlab { font-size: 12.5px; font-weight: 700; letter-spacing: .04em; }
+</style>
+
+<rect width="900" height="422" fill="#FFFFFF"/>
+
+<text x="26" y="34" class="f h" fill="#1B2A4A">Same push command. Two places to stand.</text>
+
+<!-- ================= ROW 1 : the usual setup, a dead path ================= -->
+<text x="26" y="74" class="f rowlab" fill="#8A8F98">THE USUAL SETUP</text>
+<text x="26" y="92" class="f xs" fill="#8A8F98">a git pre-push hook</text>
+
+<rect x="200" y="60" width="176" height="56" rx="7" fill="#F5F6F7" stroke="#B9BEC6"/>
+<text x="288" y="84" class="f b" fill="#5B6169" text-anchor="middle">Claude pushes</text>
+<text x="288" y="103" class="m s" fill="#5B6169" text-anchor="middle">git push --no-verify</text>
+
+<path d="M384 88 H 424" stroke="#B9BEC6" stroke-width="1.6" fill="none"/>
+<path d="M424 88 l -7 -4.5 v 9 z" fill="#B9BEC6"/>
+
+<rect x="432" y="60" width="196" height="56" rx="7" fill="#F5F6F7" stroke="#B9BEC6" stroke-dasharray="4 3"/>
+<text x="530" y="84" class="f b" fill="#8A8F98" text-anchor="middle">git checks its own hook</text>
+<text x="530" y="102" class="f xs" fill="#8A8F98" text-anchor="middle">the flag switched it off</text>
+
+<path d="M636 88 H 676" stroke="#B9BEC6" stroke-width="1.6" fill="none"/>
+<path d="M676 88 l -7 -4.5 v 9 z" fill="#B9BEC6"/>
+
+<rect x="684" y="60" width="190" height="56" rx="7" fill="#F5F6F7" stroke="#B9BEC6"/>
+<text x="779" y="84" class="f b" fill="#5B6169" text-anchor="middle">lands on main</text>
+<text x="779" y="102" class="f xs" fill="#8A8F98" text-anchor="middle">nothing ran</text>
+
+<text x="200" y="140" class="f s" fill="#5B6169">The check lives <tspan font-weight="700">inside git</tspan>, so one flag is enough to reach it.</text>
+
+<!-- ================= ROW 2 : ship gate, the live path ================= -->
+<text x="26" y="212" class="f rowlab" fill="#0B6E5F">SHIP GATE</text>
+<text x="26" y="230" class="f xs" fill="#5B6169">a Claude Code hook</text>
+
+<rect x="200" y="196" width="176" height="56" rx="7" fill="#FFFFFF" stroke="#1B2A4A" stroke-width="1.4"/>
+<text x="288" y="220" class="f b" fill="#1B2A4A" text-anchor="middle">Claude pushes</text>
+<text x="288" y="238" class="m xs" fill="#5B6169" text-anchor="middle">with or without the flag</text>
+
+<path d="M384 224 H 424" stroke="#1B2A4A" stroke-width="1.6" fill="none"/>
+<path d="M424 224 l -7 -4.5 v 9 z" fill="#1B2A4A"/>
+
+<rect x="432" y="188" width="196" height="72" rx="7" fill="#E6F4F1" stroke="#0E9384" stroke-width="1.4"/>
+<text x="530" y="212" class="f b" fill="#0B6E5F" text-anchor="middle">Ship Gate answers first</text>
+<text x="530" y="230" class="f xs" fill="#0B6E5F" text-anchor="middle">before the push command runs</text>
+<text x="530" y="248" class="f xs" fill="#0B6E5F" text-anchor="middle">so git is never reached</text>
+
+<!-- split -->
+<path d="M636 224 H 656 V 172 H 676" stroke="#B42318" stroke-width="1.6" fill="none"/>
+<path d="M676 172 l -7 -4.5 v 9 z" fill="#B42318"/>
+<path d="M636 224 H 656 V 276 H 676" stroke="#0E9384" stroke-width="1.6" fill="none"/>
+<path d="M676 276 l -7 -4.5 v 9 z" fill="#0E9384"/>
+
+<rect x="684" y="146" width="190" height="52" rx="7" fill="#FDF6F5" stroke="#B42318" stroke-width="1.3"/>
+<text x="779" y="168" class="f b" fill="#B42318" text-anchor="middle">denied</text>
+<text x="779" y="186" class="f xs" fill="#5C4A47" text-anchor="middle">no fresh pass for this commit</text>
+
+<rect x="684" y="250" width="190" height="52" rx="7" fill="#E6F4F1" stroke="#0E9384" stroke-width="1.3"/>
+<text x="779" y="272" class="f b" fill="#0B6E5F" text-anchor="middle">pushed</text>
+<text x="779" y="290" class="f xs" fill="#0B6E5F" text-anchor="middle">every gate green</text>
+
+<!-- the gates, as detail inside the answer -->
+<text x="200" y="322" class="f s" fill="#0B6E5F">Ship Gate stands <tspan font-weight="700">outside git</tspan>, so the flag has nothing left to switch off.</text>
+
+<rect x="200" y="340" width="674" height="62" rx="7" fill="#F3F5F9" stroke="#D8DDE6"/>
+<text x="214" y="362" class="f xs" fill="#5B6169" font-weight="700">What has to pass first</text>
+<text x="214" y="382" class="f s" fill="#1B2A4A">tests · lint · typecheck · build · secret scan · code review · security · UAT sign-off</text>
+<text x="214" y="396" class="f xs" fill="#8A8F98">covers Claude's pushes to your protected branch · a push hidden in bash -c is not chased · gates switchable per project</text>
+</svg>
